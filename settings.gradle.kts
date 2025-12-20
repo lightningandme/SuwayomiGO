@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Suwayomi"
+rootProject.name = "SuwayomiGO"
 include(":app")
  

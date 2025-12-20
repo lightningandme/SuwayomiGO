@@ -1,4 +1,4 @@
-package com.example.suwayomi
+package com.suwayomi.go
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4

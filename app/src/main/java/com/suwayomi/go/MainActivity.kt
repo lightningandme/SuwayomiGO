@@ -1,12 +1,10 @@
-package com.example.suwayomi
+package com.suwayomi.go
 
 
-import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.Context
 import android.content.SharedPreferences
-import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Build

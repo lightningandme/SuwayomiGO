@@ -1,4 +1,4 @@
-package com.example.suwayomi
+package com.suwayomi.go
 
 import org.junit.Test
 
