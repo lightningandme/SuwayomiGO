@@ -13,3 +13,16 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Kotlin IDE 缓存/配置
+.kotlin/
+
+# IDE/AS 产生的文件夹
+.external
+
+# 明确忽略生成的 APK/AAB 文件
+*.apk
+*.aab
+
+# 忽略 app 模块内的构建目录和 release 目录
+/app/release/
