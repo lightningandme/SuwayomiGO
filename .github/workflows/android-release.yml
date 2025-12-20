@@ -31,14 +31,16 @@ jobs:
           -Pandroid.injected.signing.key.alias=${{ secrets.ALIAS }} \
           -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-      - name: Rename APK
+      #- name: Rename APK
         # 使用 *.apk 匹配该目录下任何名字的 APK 文件
-        run: mv app/build/outputs/apk/release/*.apk app/build/outputs/apk/release/SuwayomiGO-${{ github.ref_name }}.apk
+        #run: mv app/build/outputs/apk/release/*.apk app/build/outputs/apk/release/SuwayomiGO-${{ github.ref_name }}.apk
 
+      # 2. 修改 Create Release 步骤
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/SuwayomiGO-${{ github.ref_name }}.apk
+          # 使用通配符直接上传，GitHub 会自动使用文件的真实名字
+          files: app/build/outputs/apk/release/*.apk
           name: SuwayomiGO ${{ github.ref_name }}
           draft: false
           prerelease: false
