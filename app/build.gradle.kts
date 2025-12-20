@@ -38,7 +38,7 @@ android {
     applicationVariants.all {
         outputs.all {
             val output = this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
-            output.outputFileName = "SuwayomiGO-${defaultConfig.versionName}.apk"
+            output.outputFileName = "SuwayomiGO-v${defaultConfig.versionName}.apk"
         }
     }
 }
