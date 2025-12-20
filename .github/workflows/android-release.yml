@@ -23,19 +23,23 @@ jobs:
         run: echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > release.jks
 
       - name: Build Release APK
-        run: >
-          ./gradlew assembleRelease
-          -Pandroid.injected.signing.store.file=$(pwd)/release.jks
-          -Pandroid.injected.signing.store.password=${{ secrets.KEY_STORE_PASSWORD }}
-          -Pandroid.injected.signing.key.alias=${{ secrets.ALIAS }}
+        # 这里的多行命令使用 \ 来换行，比 > 更不容易出错
+        run: |
+          ./gradlew assembleRelease \
+          -Pandroid.injected.signing.store.file=$(pwd)/release.jks \
+          -Pandroid.injected.signing.store.password=${{ secrets.KEY_STORE_PASSWORD }} \
+          -Pandroid.injected.signing.key.alias=${{ secrets.ALIAS }} \
           -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+
+      - name: Rename APK
+        # 使用 github.ref_name 获取标签名（如 v1.1.0）
+        run: mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/SuwayomiGO-${{ github.ref_name }}.apk
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          # 注意：路径变成了 release 文件夹下的 apk
-          files: app/build/outputs/apk/release/app-release.apk
-          name: SuwayomiGO v${{ github.ref_name }}
+          files: app/build/outputs/apk/release/SuwayomiGO-${{ github.ref_name }}.apk
+          name: SuwayomiGO ${{ github.ref_name }}
           draft: false
           prerelease: false
         env:
