@@ -32,8 +32,8 @@ jobs:
           -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
       - name: Rename APK
-        # 使用 github.ref_name 获取标签名（如 v1.1.0）
-        run: mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/SuwayomiGO-${{ github.ref_name }}.apk
+        # 使用 *.apk 匹配该目录下任何名字的 APK 文件
+        run: mv app/build/outputs/apk/release/*.apk app/build/outputs/apk/release/SuwayomiGO-${{ github.ref_name }}.apk
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
