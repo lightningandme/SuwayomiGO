@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">SuwayomiGO</string>
+    <string name="config_title">服务器配置</string>
+    <string name="hint_url">服务器地址 (必填)</string>
+    <string name="hint_username">用户名 (可选)</string>
+    <string name="hint_password">密码 (可选)</string>
+    <string name="btn_save">保存并进入</string>
+</resources>
