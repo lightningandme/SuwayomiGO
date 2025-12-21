@@ -1,12 +1,11 @@
 package com.suwayomi.go
 
 
+import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.app.DownloadManager
-import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -29,6 +28,8 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 
@@ -46,7 +47,7 @@ class MainActivity : AppCompatActivity() {
         // 默认进入沉浸式全屏
         hideSystemUI()
 
-        prefs = getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+        prefs = getSharedPreferences("AppConfig", MODE_PRIVATE)
         webView = findViewById(R.id.webview)
         swipeRefresh = findViewById(R.id.swipeRefresh)
 
@@ -63,31 +64,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
         val settings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.databaseEnabled = true
 
         // 兼容性微调
-        settings.useWideViewPort = true       
-        settings.loadWithOverviewMode = true 
-        settings.displayZoomControls = false 
-        settings.builtInZoomControls = false 
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
+        settings.displayZoomControls = false
+        settings.builtInZoomControls = false
 
         // 伪装 UA
         settings.userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-        }
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
         webView.viewTreeObserver.addOnScrollChangedListener {
             swipeRefresh.isEnabled = webView.scrollY == 0
         }
 
         webView.webViewClient = object : WebViewClient() {
-            
+
             // 解决旧版内核不支持 Object.hasOwn 的问题
             private fun injectFixes(view: WebView?) {
                 val js = """
@@ -136,6 +135,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            @SuppressLint("WebViewClientOnReceivedSslError")
             override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: android.net.http.SslError?) {
                 handler?.proceed()
             }
@@ -194,7 +194,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveImageToGallery(url: String) {
         try {
-            val request = DownloadManager.Request(Uri.parse(url))
+            val request = DownloadManager.Request(url.toUri())
             val pageTitle = webView.title ?: "Image"
             val cleanTitle = pageTitle.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
             val originalFileName = URLUtil.guessFileName(url, null, "image/jpeg")
@@ -243,11 +243,11 @@ class MainActivity : AppCompatActivity() {
                 val pass = editPass.text.toString()
 
                 if (url.isNotEmpty()) {
-                    prefs.edit()
-                        .putString("url", url)
-                        .putString("user", user)
-                        .putString("pass", pass)
-                        .apply()
+                    prefs.edit {
+                        putString("url", url)
+                        putString("user", user)
+                        putString("pass", pass)
+                    }
 
                     WebViewDatabase.getInstance(this).clearHttpAuthUsernamePassword()
                     webView.clearCache(true)
@@ -300,6 +300,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun hideSystemUI() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            @Suppress("DEPRECATION")
             window.setDecorFitsSystemWindows(false)
             window.insetsController?.let {
                 it.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
