@@ -176,7 +176,11 @@ class MainActivity : AppCompatActivity() {
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (webView.canGoBack()) {
+                val currentUrl = webView.url
+                // 如果当前页面 URL 后缀为 library，则回退即弹出配置对话框
+                if (currentUrl?.endsWith("library") == true || currentUrl?.endsWith("library/") == true) {
+                    showConfigDialog()
+                } else if (webView.canGoBack()) {
                     webView.goBack() // 网页内回退
                 } else {
                     // 当处于主页无法回退时，弹出服务器配置对话框
