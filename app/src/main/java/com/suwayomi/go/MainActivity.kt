@@ -5,8 +5,8 @@ import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.Bitmap
 import android.net.Uri
-import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -37,7 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var prefs: SharedPreferences
-    private var lastBackPressTime: Long = 0 // 用于记录上次按下返回键的时间
+    private var lastBackPressTime: Long = 0 
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,9 +68,15 @@ class MainActivity : AppCompatActivity() {
         val settings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.databaseEnabled = true // 开启数据库存储支持
+        settings.databaseEnabled = true
 
-        // 伪装 UA，防止被识别为老旧浏览器
+        // 兼容性微调
+        settings.useWideViewPort = true       
+        settings.loadWithOverviewMode = true 
+        settings.displayZoomControls = false 
+        settings.builtInZoomControls = false 
+
+        // 伪装 UA
         settings.userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -78,12 +84,30 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.viewTreeObserver.addOnScrollChangedListener {
-            // 只有当 WebView 滚动高度为 0 时，才启用下拉刷新
             swipeRefresh.isEnabled = webView.scrollY == 0
         }
 
         webView.webViewClient = object : WebViewClient() {
-            // 处理 Basic Auth (网页基础验证)
+            
+            // 仅保留 Object.hasOwn 的修复补丁，移除 CSS 缩放补丁
+            private fun injectFixes(view: WebView?) {
+                val js = """
+                    (function() {
+                        if (!Object.hasOwn) {
+                            Object.hasOwn = function(object, property) {
+                                return Object.prototype.hasOwnProperty.call(object, property);
+                            };
+                        }
+                    })();
+                """.trimIndent()
+                view?.evaluateJavascript(js, null)
+            }
+
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                injectFixes(view)
+            }
+
             override fun onReceivedHttpAuthRequest(
                 view: WebView?,
                 handler: HttpAuthHandler?,
@@ -113,8 +137,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // 忽略 SSL 错误（解决老设备根证书过期导致的白屏）
-            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: android.net.http.SslError?) {
                 handler?.proceed()
             }
 
@@ -122,6 +145,7 @@ class MainActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
                 swipeRefresh.isRefreshing = false
                 view?.tag = null
+                injectFixes(view)
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
@@ -132,7 +156,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 长按图片保存
         webView.setOnLongClickListener {
             val result = webView.hitTestResult
             if (result.type == WebView.HitTestResult.IMAGE_TYPE || result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
@@ -150,16 +173,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- 核心修复：双击退出逻辑，防止误退 ---
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (webView.canGoBack()) {
-                    webView.goBack() // 网页内回退
+                    webView.goBack()
                 } else {
                     val currentTime = System.currentTimeMillis()
                     if (currentTime - lastBackPressTime < 2000) {
-                        finish() // 2秒内双击退出
+                        finish()
                     } else {
                         lastBackPressTime = currentTime
                         Toast.makeText(this@MainActivity, "再按一次退出应用", Toast.LENGTH_SHORT).show()
@@ -178,12 +200,8 @@ class MainActivity : AppCompatActivity() {
     private fun saveImageToGallery(url: String) {
         try {
             val request = DownloadManager.Request(Uri.parse(url))
-            
-            // 1. 获取网页标题并清理非法文件名字符
             val pageTitle = webView.title ?: "Image"
             val cleanTitle = pageTitle.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
-            
-            // 2. 获取原始文件名并拼接前缀
             val originalFileName = URLUtil.guessFileName(url, null, "image/jpeg")
             val fileName = "${cleanTitle}_$originalFileName"
 
@@ -198,8 +216,6 @@ class MainActivity : AppCompatActivity() {
             request.setTitle("漫画下载")
             request.setDescription("正在下载: $fileName")
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            
-            // 保存到公共 Pictures 目录下的 Suwayomi 文件夹，带上前缀名
             request.setDestinationInExternalPublicDir(Environment.DIRECTORY_PICTURES, "Suwayomi/$fileName")
 
             val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
@@ -274,7 +290,6 @@ class MainActivity : AppCompatActivity() {
         webView.evaluateJavascript(jsCode, null)
     }
 
-    // 焦点变动时维持全屏（防止切换后台回来后 UI 恢复）
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
