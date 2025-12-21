@@ -37,7 +37,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var prefs: SharedPreferences
-    private var lastBackPressTime: Long = 0 
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -89,7 +88,7 @@ class MainActivity : AppCompatActivity() {
 
         webView.webViewClient = object : WebViewClient() {
             
-            // 仅保留 Object.hasOwn 的修复补丁，移除 CSS 缩放补丁
+            // 解决旧版内核不支持 Object.hasOwn 的问题
             private fun injectFixes(view: WebView?) {
                 val js = """
                     (function() {
@@ -173,19 +172,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // --- 核心修复：点击返回键不再直接退出，而是弹出配置对话框 ---
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (webView.canGoBack()) {
-                    webView.goBack()
+                    webView.goBack() // 网页内回退
                 } else {
-                    val currentTime = System.currentTimeMillis()
-                    if (currentTime - lastBackPressTime < 2000) {
-                        finish()
-                    } else {
-                        lastBackPressTime = currentTime
-                        Toast.makeText(this@MainActivity, "再按一次退出应用", Toast.LENGTH_SHORT).show()
-                    }
+                    // 当处于主页无法回退时，弹出服务器配置对话框
+                    showConfigDialog()
                 }
             }
         })
@@ -232,14 +227,16 @@ class MainActivity : AppCompatActivity() {
         val editUser = view.findViewById<EditText>(R.id.editUser)
         val editPass = view.findViewById<EditText>(R.id.editPass)
 
-        editUrl.setText(prefs.getString("url", "https://"))
+        val savedUrl = prefs.getString("url", "")
+        editUrl.setText(if (savedUrl.isNullOrEmpty()) "https://" else savedUrl)
         editUser.setText(prefs.getString("user", ""))
         editPass.setText(prefs.getString("pass", ""))
 
         AlertDialog.Builder(this)
             .setTitle("服务器配置")
             .setView(view)
-            .setCancelable(false)
+            // 如果已有配置，则允许点击外部或返回键取消（回到网页）
+            .setCancelable(savedUrl.isNullOrEmpty().not())
             .setPositiveButton("保存并进入") { _, _ ->
                 val url = editUrl.text.toString()
                 val user = editUser.text.toString()
@@ -257,6 +254,10 @@ class MainActivity : AppCompatActivity() {
                     webView.tag = null
                     webView.loadUrl(url)
                 }
+            }
+            // 添加“退出应用”按钮
+            .setNegativeButton("退出应用") { _, _ ->
+                finish()
             }
             .show()
     }
