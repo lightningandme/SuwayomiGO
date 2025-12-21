@@ -1,5 +1,5 @@
 # SuwayomiGO 🚀
-![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/lightningandme/SuwayomiGO?label=version&color=orange)
+[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/lightningandme/SuwayomiGO?label=version&color=orange)](https://github.com/lightningandme/SuwayomiGO/releases)
 
 SuwayomiGO 是一个适配 Suwayomi-WebUI 的增强型安卓套壳客户端，旨在提升 Suwayomi (Tachidesk) 在移动端的使用体验。
 
