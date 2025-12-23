@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PromptTemplates">
+    <option name="builtInPromptOverrides">
+      <list>
+        <BuiltInPromptOverride>
+          <option name="groupId" value="rules" />
+          <option name="promptId" value="project" />
+          <option name="text" value="# 核心规则：注释与格式保护 (Core Rule: Comments &amp; Formatting Protection)&#10;&#10;1. [STRICT] 严禁删除注释：Regardless of logic changes, you must PRESERVE all existing comments, including //, /* */, KDoc (/** */), and TODOs.&#10;2. [FORMAT] 保持格式一致：Maintain original indentation, line breaks, and coding style. 不要为了简洁而合并代码行。&#10;3. [DOCUMENTATION] 文档完整性：Do not remove descriptive documentation. 修复代码时，不要修改与代码逻辑无关的文字说明。&#10;4. [COMMENT] 新手友好：新增代码要有比较详细的注释，说明代码意图。&#10;&#10;# 注意：如果发现代码重构后注释丢失，请立即撤销并重新生成。&#10;&#10;Please always respond to my questions in Chinese. Keep programming-specific technical terms in their original English form, followed by a Chinese explanation." />
+        </BuiltInPromptOverride>
+      </list>
+    </option>
+    <option name="prompts">
+      <list>
+        <PromptTemplate>
+          <option name="enabled" value="true" />
+          <option name="name" value="完善注释" />
+          <option name="text" value="帮我完善这里的注释：$SELECTION" />
+        </PromptTemplate>
+        <PromptTemplate>
+          <option name="enabled" value="true" />
+          <option name="name" value="修复错误" />
+          <option name="text" value="查看当下文件显示的问题消息，分析并尝试修复这里的错误（不包括警告）。" />
+        </PromptTemplate>
+        <PromptTemplate>
+          <option name="enabled" value="true" />
+          <option name="name" value="实现功能" />
+          <option name="text" value="我想在$SELECTION的基础上实现这样的功能：" />
+        </PromptTemplate>
+        <PromptTemplate>
+          <option name="enabled" value="true" />
+          <option name="name" value="修复警告" />
+          <option name="text" value="查看当下文件显示的问题消息，分析并尝试修复这里的警告。" />
+        </PromptTemplate>
+      </list>
+    </option>
+  </component>
+</project>
