@@ -6,6 +6,7 @@ import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.SharedPreferences
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -15,6 +16,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.webkit.HttpAuthHandler
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
@@ -33,6 +35,7 @@ import androidx.core.net.toUri
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 
+@Suppress("DEPRECATION")
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
@@ -44,7 +47,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // 默认进入沉浸式全屏
+        // 默认进入沉浸式全面屏，并适配状态栏 (Default immersive edge-to-edge)
         hideSystemUI()
 
         prefs = getSharedPreferences("AppConfig", MODE_PRIVATE)
@@ -77,7 +80,7 @@ class MainActivity : AppCompatActivity() {
         settings.builtInZoomControls = false
 
         // 伪装 UA
-        settings.userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
+        settings.userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
 
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
@@ -104,6 +107,8 @@ class MainActivity : AppCompatActivity() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 injectFixes(view)
+                // 关键修复：使用实时回调的 url 进行 UI 判定，确保离开阅读页时能立即恢复状态栏
+                hideSystemUI(url)
             }
 
             override fun onReceivedHttpAuthRequest(
@@ -145,6 +150,14 @@ class MainActivity : AppCompatActivity() {
                 swipeRefresh.isRefreshing = false
                 view?.tag = null
                 injectFixes(view)
+                // 页面加载完成后再次确认 UI 状态
+                hideSystemUI(url)
+            }
+
+            override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                super.doUpdateVisitedHistory(view, url, isReload)
+                // 关键修复：当历史更新（如后退）时，立即同步状态栏显示状态
+                hideSystemUI(url)
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
@@ -172,7 +185,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- 核心修改：点击返回键在特定页面弹出配置对话框 ---
+    // --- 核心修复：点击返回键在特定页面弹出配置对话框 ---
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -308,22 +321,55 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun hideSystemUI() {
+    /**
+     * 实现全面屏沉浸式体验，动态显示/隐藏状态栏
+     * @param targetUrl 可选参数。如果提供，则基于此 URL 判断 UI 状态；否则使用 WebView 当前 URL。
+     */
+    private fun hideSystemUI(targetUrl: String? = null) {
+        // 判定逻辑：优先使用传入的目标 URL，解决页面切换瞬间状态栏显示滞后的问题
+        val currentUrl = targetUrl ?: (if (::webView.isInitialized) webView.url else null)
+        val isChapterPage = currentUrl?.contains("chapter") == true
+
+        // 1. 设置内容延伸到系统栏（状态栏和导航栏）区域
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            @Suppress("DEPRECATION")
             window.setDecorFitsSystemWindows(false)
             window.insetsController?.let {
-                it.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                // 始终隐藏导航栏
+                it.hide(WindowInsets.Type.navigationBars())
+                
+                if (isChapterPage) {
+                    // 如果是章节阅读页，隐藏状态栏
+                    it.hide(WindowInsets.Type.statusBars())
+                } else {
+                    // 非阅读页面保持状态栏可见
+                    it.show(WindowInsets.Type.statusBars())
+                }
+                
+                // 采用滑动呼出的交互方式
                 it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         } else {
             @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            var flags = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                     or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                     or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                     or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                    or View.SYSTEM_UI_FLAG_FULLSCREEN)
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
+            
+            if (isChapterPage) {
+                flags = flags or View.SYSTEM_UI_FLAG_FULLSCREEN
+            }
+            
+            window.decorView.systemUiVisibility = flags
+        }
+
+        // 2. 将状态栏颜色设为透明，实现真正的沉浸式效果
+        window.statusBarColor = Color.TRANSPARENT
+
+        // 3. 适配刘海屏
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
     }
 }
