@@ -172,13 +172,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- 核心修复：点击返回键不再直接退出，而是弹出配置对话框 ---
+    // --- 核心修改：点击返回键在特定页面弹出配置对话框 ---
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 val currentUrl = webView.url
-                // 如果当前页面 URL 后缀为 library，则回退即弹出配置对话框
-                if (currentUrl?.endsWith("library") == true || currentUrl?.endsWith("library/") == true) {
+                
+                // 定义需要触发配置弹窗的页面后缀
+                val rootSuffixes = listOf("library", "updates", "history", "sources")
+                val isRootPage = rootSuffixes.any { suffix ->
+                    currentUrl?.endsWith(suffix) == true || currentUrl?.endsWith("$suffix/") == true
+                }
+
+                if (isRootPage) {
                     showConfigDialog()
                 } else if (webView.canGoBack()) {
                     webView.goBack() // 网页内回退
