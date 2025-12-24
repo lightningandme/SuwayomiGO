@@ -20,8 +20,8 @@
         <!-- 使用之前创建的 loading_logo_layer 资源，保证形状与应用 Logo 一致 -->
         <ImageView
             android:id="@+id/loadingProgress"
-            android:layout_width="80dp"
-            android:layout_height="80dp"
+            android:layout_width="160dp"
+            android:layout_height="160dp"
             android:src="@drawable/loading_logo_layer"
             android:visibility="gone"
             app:layout_constraintTop_toTopOf="parent"
