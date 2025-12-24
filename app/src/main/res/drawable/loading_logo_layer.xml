@@ -5,13 +5,13 @@
     <item>
         <shape android:shape="oval">
             <solid android:color="#3581b2" />
-            <size android:width="100dp" android:height="100dp" />
+            <size android:width="200dp" android:height="200dp" />
         </shape>
     </item>
 
     <!-- 2. 深蓝内圈 (Dark Blue Inner Circle) -->
     <!-- 稍微减小内圈，为文字提供更深邃的背景感 -->
-    <item android:top="12dp" android:bottom="12dp" android:left="12dp" android:right="12dp">
+    <item android:top="20dp" android:bottom="20dp" android:left="20dp" android:right="20dp">
         <shape android:shape="oval">
             <solid android:color="#252743" />
         </shape>
@@ -21,7 +21,7 @@
     <!-- 关键优化：使用负数内边距 (Negative Insets) 强制放大矢量图 -->
     <!-- 这会抵消矢量图内部自带的边距，使文字更加显眼 -->
     <item
-        android:drawable="@drawable/ic_launcher_foreground"
+        android:drawable="@drawable/loading_foreground"
         android:gravity="center"
         android:top="0dp"
         android:bottom="0dp"
