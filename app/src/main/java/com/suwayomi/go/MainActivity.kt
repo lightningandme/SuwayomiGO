@@ -36,6 +36,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.core.view.isVisible
+import androidx.core.graphics.toColorInt
 
 
 @Suppress("DEPRECATION")
@@ -103,7 +105,7 @@ class MainActivity : AppCompatActivity() {
                 super.onProgressChanged(view, newProgress)
                 // 当进度达到 100% 且加载视图可见时，启动延迟隐藏逻辑
                 // 优化：增加 tag 判定，防止重复提交延迟任务 (Avoid multiple delayed tasks)
-                if (newProgress == 100 && loadingView.visibility == View.VISIBLE && loadingView.tag == null) {
+                if (newProgress == 100 && loadingView.isVisible && loadingView.tag == null) {
                     loadingView.tag = "is_ending" // 标记正在处理结束逻辑
                     // 实现要求：webview加载完成，加载动画任继续运行1秒 (Keep animation for 1s after load)
                     webView.postDelayed({
@@ -215,12 +217,18 @@ class MainActivity : AppCompatActivity() {
             if (result.type == WebView.HitTestResult.IMAGE_TYPE || result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
                 val imageUrl = result.extra
                 if (imageUrl != null) {
-                    AlertDialog.Builder(this)
+                    val dialog = AlertDialog.Builder(this)
                         .setTitle("保存图片")
                         .setMessage("要下载这张漫画页面吗？")
                         .setPositiveButton("下载") { _, _ -> saveImageToGallery(imageUrl) }
                         .setNegativeButton("取消", null)
-                        .show()
+                        .create()
+                    
+                    dialog.show()
+                    
+                    // 按钮颜色定制为 #3581b2 (Custom button color)
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
+                    dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
                 }
                 true
             } else false
@@ -295,7 +303,7 @@ class MainActivity : AppCompatActivity() {
         editUser.setText(prefs.getString("user", ""))
         editPass.setText(prefs.getString("pass", ""))
 
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("服务器配置")
             .setView(view)
             .setCancelable(savedUrl.isNullOrEmpty().not())
@@ -320,7 +328,13 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("退出应用") { _, _ ->
                 finish()
             }
-            .show()
+            .create()
+
+        dialog.show()
+        
+        // 核心改动：在对话框显示后设置按钮颜色 (Set custom button color #3581b2 after show)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
