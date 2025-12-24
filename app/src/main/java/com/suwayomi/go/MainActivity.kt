@@ -68,6 +68,11 @@ class MainActivity : AppCompatActivity() {
         if (savedUrl.isNullOrEmpty()) {
             showConfigDialog()
         } else {
+            // 核心修复：在应用启动准备加载 URL 时立即显示加载动画，防止 cold start 时的短暂空白 (Ensure loading visibility on startup)
+            loadingView.visibility = View.VISIBLE
+            val pulse = AnimationUtils.loadAnimation(this, R.anim.pulse_animation)
+            loadingView.startAnimation(pulse)
+
             webView.loadUrl(savedUrl)
         }
     }
