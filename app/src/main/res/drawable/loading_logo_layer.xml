@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 1. MyGO蓝色外圈 -->
+    <!-- 1. MyGO蓝色外圈 (MyGO Blue Outer Circle) -->
     <item>
         <shape android:shape="oval">
             <solid android:color="#3581b2" />
@@ -9,15 +9,17 @@
         </shape>
     </item>
 
-    <!-- 2. 深蓝内圈 -->
-    <item android:top="18dp" android:bottom="18dp" android:left="18dp" android:right="18dp">
+    <!-- 2. 深蓝内圈 (Dark Blue Inner Circle) -->
+    <!-- 稍微减小内圈，为文字提供更深邃的背景感 -->
+    <item android:top="12dp" android:bottom="12dp" android:left="12dp" android:right="12dp">
         <shape android:shape="oval">
             <solid android:color="#252743" />
         </shape>
     </item>
 
-    <!-- 3. Logo字样 -->
-    <!-- 注意：ic_launcher_foreground 是矢量图，比 mipmap 更适合做缩放动画 -->
+    <!-- 3. Logo字样 (Enlarged Logo/Text) -->
+    <!-- 关键优化：使用负数内边距 (Negative Insets) 强制放大矢量图 -->
+    <!-- 这会抵消矢量图内部自带的边距，使文字更加显眼 -->
     <item
         android:drawable="@drawable/ic_launcher_foreground"
         android:gravity="center"

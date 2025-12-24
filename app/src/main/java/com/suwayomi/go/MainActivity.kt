@@ -96,20 +96,21 @@ class MainActivity : AppCompatActivity() {
         webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 super.onProgressChanged(view, newProgress)
-                if (newProgress < 100) {
-                    // 还在加载中，WebView 不可见，loadingView 显示并启动动画
-                    if (webView.visibility != View.INVISIBLE) {
-                        webView.visibility = View.INVISIBLE
-                        loadingView.visibility = View.VISIBLE
-                        val pulse = AnimationUtils.loadAnimation(this@MainActivity, R.anim.pulse_animation)
-                        loadingView.startAnimation(pulse)
-                    }
-                } else {
-                    // 加载完成，显示 WebView，隐藏 loadingView 并停止动画
-                    webView.visibility = View.VISIBLE
-                    loadingView.clearAnimation()
-                    loadingView.visibility = View.GONE
-                    swipeRefresh.isRefreshing = false
+                // 当进度达到 100% 且加载视图可见时，启动延迟隐藏逻辑
+                // 优化：增加 tag 判定，防止重复提交延迟任务 (Avoid multiple delayed tasks)
+                if (newProgress == 100 && loadingView.visibility == View.VISIBLE && loadingView.tag == null) {
+                    loadingView.tag = "is_ending" // 标记正在处理结束逻辑
+                    // 实现要求：webview加载完成，加载动画任继续运行1秒 (Keep animation for 1s after load)
+                    webView.postDelayed({
+                        // 再次检查进度，防止延迟期间用户又触发了新的刷新
+                        if (webView.progress == 100) {
+                            webView.visibility = View.VISIBLE
+                            loadingView.clearAnimation() // 停止呼吸灯动画 (Stop Pulse Animation)
+                            loadingView.visibility = View.GONE
+                            swipeRefresh.isRefreshing = false
+                        }
+                        loadingView.tag = null // 重置标记
+                    }, 1000)
                 }
             }
         }
@@ -134,6 +135,16 @@ class MainActivity : AppCompatActivity() {
                 super.onPageStarted(view, url, favicon)
                 injectFixes(view)
                 hideSystemUI(url)
+
+                // 核心逻辑：页面刷新（或开始加载新页面）时触发动画并隐藏内容
+                // 确保“首次冷启动”和“页面刷新”都能看到加载效果 (Ensure load visibility on cold start/refresh)
+                webView.visibility = View.INVISIBLE
+                if (loadingView.visibility != View.VISIBLE) {
+                    loadingView.tag = null // 如果有正在运行的延迟任务，在此重置 (Reset tag if new load starts)
+                    loadingView.visibility = View.VISIBLE
+                    val pulse = AnimationUtils.loadAnimation(this@MainActivity, R.anim.pulse_animation)
+                    loadingView.startAnimation(pulse)
+                }
             }
 
             override fun onReceivedHttpAuthRequest(
