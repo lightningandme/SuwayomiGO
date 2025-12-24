@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 1. MyGO蓝色外圈 -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#3581b2" />
+            <size android:width="100dp" android:height="100dp" />
+        </shape>
+    </item>
+
+    <!-- 2. 深蓝内圈 -->
+    <item android:top="18dp" android:bottom="18dp" android:left="18dp" android:right="18dp">
+        <shape android:shape="oval">
+            <solid android:color="#252743" />
+        </shape>
+    </item>
+
+    <!-- 3. Logo字样 -->
+    <!-- 注意：ic_launcher_foreground 是矢量图，比 mipmap 更适合做缩放动画 -->
+    <item
+        android:drawable="@drawable/ic_launcher_foreground"
+        android:gravity="center"
+        android:top="0dp"
+        android:bottom="0dp"
+        android:left="0dp"
+        android:right="0dp" />
+</layer-list>

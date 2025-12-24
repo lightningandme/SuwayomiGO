@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 实现呼吸灯脉冲效果：从 0.8 倍缩放到 1.1 倍，并循环 -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:anim/accelerate_decelerate_interpolator"
+    android:shareInterpolator="true">
+
+    <scale
+        android:duration="800"
+        android:fromXScale="0.8"
+        android:fromYScale="0.8"
+        android:toXScale="1.1"
+        android:toYScale="1.1"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:repeatCount="infinite"
+        android:repeatMode="reverse" />
+
+    <alpha
+        android:duration="800"
+        android:fromAlpha="0.6"
+        android:toAlpha="1.0"
+        android:repeatCount="infinite"
+        android:repeatMode="reverse" />
+</set>

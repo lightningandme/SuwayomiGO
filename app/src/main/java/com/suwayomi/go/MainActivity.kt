@@ -17,9 +17,11 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.view.animation.AnimationUtils
 import android.webkit.HttpAuthHandler
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -27,6 +29,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebViewDatabase
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
@@ -40,6 +43,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var swipeRefresh: SwipeRefreshLayout
+    private lateinit var loadingView: ImageView
     private lateinit var prefs: SharedPreferences
 
 
@@ -53,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         prefs = getSharedPreferences("AppConfig", MODE_PRIVATE)
         webView = findViewById(R.id.webview)
         swipeRefresh = findViewById(R.id.swipeRefresh)
+        loadingView = findViewById(R.id.loadingProgress)
 
         setupWebView()
         setupSwipeRefresh()
@@ -88,6 +93,27 @@ class MainActivity : AppCompatActivity() {
             swipeRefresh.isEnabled = webView.scrollY == 0
         }
 
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                super.onProgressChanged(view, newProgress)
+                if (newProgress < 100) {
+                    // 还在加载中，WebView 不可见，loadingView 显示并启动动画
+                    if (webView.visibility != View.INVISIBLE) {
+                        webView.visibility = View.INVISIBLE
+                        loadingView.visibility = View.VISIBLE
+                        val pulse = AnimationUtils.loadAnimation(this@MainActivity, R.anim.pulse_animation)
+                        loadingView.startAnimation(pulse)
+                    }
+                } else {
+                    // 加载完成，显示 WebView，隐藏 loadingView 并停止动画
+                    webView.visibility = View.VISIBLE
+                    loadingView.clearAnimation()
+                    loadingView.visibility = View.GONE
+                    swipeRefresh.isRefreshing = false
+                }
+            }
+        }
+
         webView.webViewClient = object : WebViewClient() {
 
             // 解决旧版内核不支持 Object.hasOwn 的问题
@@ -107,7 +133,6 @@ class MainActivity : AppCompatActivity() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 injectFixes(view)
-                // 关键修复：使用实时回调的 url 进行 UI 判定，确保离开阅读页时能立即恢复状态栏
                 hideSystemUI(url)
             }
 
@@ -147,21 +172,22 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                swipeRefresh.isRefreshing = false
                 view?.tag = null
                 injectFixes(view)
-                // 页面加载完成后再次确认 UI 状态
                 hideSystemUI(url)
             }
 
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
-                // 关键修复：当历史更新（如后退）时，立即同步状态栏显示状态
                 hideSystemUI(url)
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                 if (request?.isForMainFrame == true) {
+                    swipeRefresh.isRefreshing = false
+                    loadingView.clearAnimation()
+                    loadingView.visibility = View.GONE
+                    webView.visibility = View.VISIBLE
                     Toast.makeText(this@MainActivity, "连接失败，请检查配置", Toast.LENGTH_LONG).show()
                     showConfigDialog()
                 }
@@ -185,13 +211,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- 核心修复：点击返回键在特定页面弹出配置对话框 ---
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 val currentUrl = webView.url
-                
-                // 定义需要触发配置弹窗的页面后缀
                 val rootSuffixes = listOf("library", "updates", "history", "sources")
                 val isRootPage = rootSuffixes.any { suffix ->
                     currentUrl?.endsWith(suffix) == true || currentUrl?.endsWith("$suffix/") == true
@@ -200,9 +223,8 @@ class MainActivity : AppCompatActivity() {
                 if (isRootPage) {
                     showConfigDialog()
                 } else if (webView.canGoBack()) {
-                    webView.goBack() // 网页内回退
+                    webView.goBack()
                 } else {
-                    // 当处于主页无法回退时，弹出服务器配置对话框
                     showConfigDialog()
                 }
             }
@@ -210,7 +232,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupSwipeRefresh() {
+        swipeRefresh.setColorSchemeResources(R.color.ic_launcher_background)
         swipeRefresh.setOnRefreshListener {
+            swipeRefresh.isRefreshing = false
             webView.reload()
         }
     }
@@ -258,7 +282,6 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("服务器配置")
             .setView(view)
-            // 如果已有配置，则允许点击外部或返回键取消（回到网页）
             .setCancelable(savedUrl.isNullOrEmpty().not())
             .setPositiveButton("保存并进入") { _, _ ->
                 val url = editUrl.text.toString()
@@ -278,7 +301,6 @@ class MainActivity : AppCompatActivity() {
                     webView.loadUrl(url)
                 }
             }
-            // 添加“退出应用”按钮
             .setNegativeButton("退出应用") { _, _ ->
                 finish()
             }
@@ -321,31 +343,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 实现全面屏沉浸式体验，动态显示/隐藏状态栏
-     * @param targetUrl 可选参数。如果提供，则基于此 URL 判断 UI 状态；否则使用 WebView 当前 URL。
-     */
     private fun hideSystemUI(targetUrl: String? = null) {
-        // 判定逻辑：优先使用传入的目标 URL，解决页面切换瞬间状态栏显示滞后的问题
         val currentUrl = targetUrl ?: (if (::webView.isInitialized) webView.url else null)
         val isChapterPage = currentUrl?.contains("chapter") == true
 
-        // 1. 设置内容延伸到系统栏（状态栏和导航栏）区域
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.setDecorFitsSystemWindows(false)
             window.insetsController?.let {
-                // 始终隐藏导航栏
                 it.hide(WindowInsets.Type.navigationBars())
-                
                 if (isChapterPage) {
-                    // 如果是章节阅读页，隐藏状态栏
                     it.hide(WindowInsets.Type.statusBars())
                 } else {
-                    // 非阅读页面保持状态栏可见
                     it.show(WindowInsets.Type.statusBars())
                 }
-                
-                // 采用滑动呼出的交互方式
                 it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         } else {
@@ -363,10 +373,8 @@ class MainActivity : AppCompatActivity() {
             window.decorView.systemUiVisibility = flags
         }
 
-        // 2. 将状态栏颜色设为透明，实现真正的沉浸式效果
         window.statusBarColor = Color.TRANSPARENT
 
-        // 3. 适配刘海屏
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
