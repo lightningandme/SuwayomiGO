@@ -3,10 +3,10 @@
     android:height="108dp"
     android:viewportWidth="100"
     android:viewportHeight="100">
-  <group android:scaleX="0.75"
-      android:scaleY="0.75"
-      android:translateX="12.5"
-      android:translateY="12.5">
+  <group android:scaleX="0.9"
+      android:scaleY="0.9"
+      android:translateX="5"
+      android:translateY="5">
       <group>
           <clip-path
               android:pathData="M0,0h100v100h-100z"/>
@@ -15,7 +15,7 @@
               android:fillColor="#FDFDFD"/>
           <path
               android:pathData="M78.65,37.84L80.19,39.35C79.65,47.38 74.76,55.54 69.32,61.19C67.92,62.62 67.46,63.08 66.24,63.3C65.3,63.11 64.57,62.86 63.7,62.46L62.35,61.78C62.24,60.57 62.24,60.57 62.68,59.95L65.92,56.86C69.81,52.97 72.11,47.59 73.43,42.32H61.81V50.16C61.19,50.46 60.84,50.46 60.16,50.46C56.43,50.46 56.43,50.46 56.13,50.16V36.92L74.62,36.62C76.24,36.65 77.46,36.68 78.65,37.84Z"
-              android:fillColor="#F9F9F9"/>
+              android:fillColor="#FDFDFD"/>
       </group>
   </group>
 </vector>
