@@ -97,7 +97,9 @@ class MainActivity : AppCompatActivity() {
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
         webView.viewTreeObserver.addOnScrollChangedListener {
-            swipeRefresh.isEnabled = webView.scrollY == 0
+            // 核心修改：仅在非章节页面（URL 不含 "chapter"）且滚动到顶部时启用下拉刷新 (Enable swipe refresh only on non-chapter pages at scroll top)
+            val isChapterPage = webView.url?.contains("chapter") == true
+            swipeRefresh.isEnabled = webView.scrollY == 0 && !isChapterPage
         }
 
         webView.webChromeClient = object : WebChromeClient() {
@@ -142,6 +144,10 @@ class MainActivity : AppCompatActivity() {
                 super.onPageStarted(view, url, favicon)
                 injectFixes(view)
                 hideSystemUI(url)
+
+                // 核心修改：根据当前 URL 状态同步下拉刷新的启用状态 (Sync swipe refresh state based on URL)
+                val isChapterPage = url?.contains("chapter") == true
+                swipeRefresh.isEnabled = !isChapterPage
 
                 // 核心逻辑：页面刷新（或开始加载新页面）时触发动画并隐藏内容
                 // 确保“首次冷启动”和“页面刷新”都能看到加载效果 (Ensure load visibility on cold start/refresh)
@@ -221,11 +227,19 @@ class MainActivity : AppCompatActivity() {
                 view?.tag = null
                 injectFixes(view)
                 hideSystemUI(url)
+
+                // 核心修改：在页面加载完成时再次确认下拉刷新的启用状态 (Re-verify swipe refresh state on page finish)
+                val isChapterPage = url?.contains("chapter") == true
+                swipeRefresh.isEnabled = webView.scrollY == 0 && !isChapterPage
             }
 
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
                 hideSystemUI(url)
+
+                // 历史记录更新时同步刷新状态 (Sync refresh state on history update)
+                val isChapterPage = url?.contains("chapter") == true
+                swipeRefresh.isEnabled = webView.scrollY == 0 && !isChapterPage
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
