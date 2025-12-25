@@ -38,6 +38,7 @@ import androidx.core.net.toUri
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.core.view.isVisible
 import androidx.core.graphics.toColorInt
+import com.suwayomi.go.widget.WiperView
 
 
 @Suppress("DEPRECATION")
@@ -46,6 +47,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var loadingView: ImageView
+    private lateinit var wiperView: WiperView
     private lateinit var prefs: SharedPreferences
 
 
@@ -60,6 +62,7 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webview)
         swipeRefresh = findViewById(R.id.swipeRefresh)
         loadingView = findViewById(R.id.loadingProgress)
+        wiperView = findViewById(R.id.wiperView)
 
         setupWebView()
         setupSwipeRefresh()
@@ -295,7 +298,7 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 val currentUrl = webView.url
-                val rootSuffixes = listOf("library", "updates", "history", "sources","extensions","migrate","more")
+                val rootSuffixes = listOf("library", "updates", "history", "sources", "extensions", "migrate", "more")
                 val isRootPage = rootSuffixes.any { suffix ->
                     currentUrl?.endsWith(suffix) == true || currentUrl?.endsWith("$suffix/") == true
                 }
@@ -396,10 +399,14 @@ class MainActivity : AppCompatActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                // 执行反向动画 (下一页/向右)
+                wiperView.startWipeAnimation(fromLeftToRight = false)
                 simulateKey("ArrowRight", 39)
                 return true
             }
             KeyEvent.KEYCODE_VOLUME_UP -> {
+                // 执行正向动画 (上一页/向左)
+                wiperView.startWipeAnimation(fromLeftToRight = true)
                 simulateKey("ArrowLeft", 37)
                 return true
             }

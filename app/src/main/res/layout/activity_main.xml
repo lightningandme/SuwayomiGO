@@ -16,6 +16,11 @@
             android:layout_height="match_parent"
             android:visibility="invisible" />
 
+        <com.suwayomi.go.widget.WiperView
+            android:id="@+id/wiperView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
         <!-- 进阶方案：使用 ImageView 替代 ProgressBar 以支持自定义形状和呼吸灯动画 -->
         <!-- 使用之前创建的 loading_logo_layer 资源，保证形状与应用 Logo 一致 -->
         <ImageView
