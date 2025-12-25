@@ -295,7 +295,7 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 val currentUrl = webView.url
-                val rootSuffixes = listOf("library", "updates", "history", "sources")
+                val rootSuffixes = listOf("library", "updates", "history", "sources","extensions","migrate","more")
                 val isRootPage = rootSuffixes.any { suffix ->
                     currentUrl?.endsWith(suffix) == true || currentUrl?.endsWith("$suffix/") == true
                 }
@@ -431,39 +431,58 @@ class MainActivity : AppCompatActivity() {
 
     private fun hideSystemUI(targetUrl: String? = null) {
         val currentUrl = targetUrl ?: (if (::webView.isInitialized) webView.url else null)
-        val isChapterPage = currentUrl?.contains("chapter") == true
+        // 增加判空保护 (Add null protection)
+        val isChapterPage = !currentUrl.isNullOrEmpty() && currentUrl.contains("chapter")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.setDecorFitsSystemWindows(false)
-            window.insetsController?.let {
-                it.hide(WindowInsets.Type.navigationBars())
+            // 核心修复：只有进入章节页面才进入沉浸全屏模式。普通页面应保持状态栏可见且不被覆盖。
+            window.setDecorFitsSystemWindows(!isChapterPage)
+            window.insetsController?.let { controller ->
                 if (isChapterPage) {
-                    it.hide(WindowInsets.Type.statusBars())
+                    controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                    controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 } else {
-                    it.show(WindowInsets.Type.statusBars())
+                    controller.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                    // 核心修改：在黑色背景下，我们需要“浅色/白色”图标，所以 appearance 参数应为 0
+                    // (Ensure light icons for the black status bar background on Android 11+)
+                    controller.setSystemBarsAppearance(0, WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS)
                 }
-                it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         } else {
             @Suppress("DEPRECATION")
-            var flags = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
-            
             if (isChapterPage) {
-                flags = flags or View.SYSTEM_UI_FLAG_FULLSCREEN
+                window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        or View.SYSTEM_UI_FLAG_FULLSCREEN)
+            } else {
+                // 普通页面清除全屏和隐藏导航栏的 Flag (Clear flags for normal pages)
+                window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                
+                // 针对 Android 6.0+，清除 LIGHT_STATUS_BAR 确保图标在黑色背景下是白色的
+                // (For Android M+, ensure icons are light to contrast with BLACK background)
+                var flags = window.decorView.systemUiVisibility
+                flags = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+                window.decorView.systemUiVisibility = flags
             }
-            
-            window.decorView.systemUiVisibility = flags
         }
 
-        window.statusBarColor = Color.TRANSPARENT
+        // 核心修改：简化状态栏颜色 (Simplified status bar color)
+        // 非章节页直接使用黑色 Color.BLACK，章节页保持透明以支持沉浸模式
+        window.statusBarColor = if (isChapterPage) {
+            Color.TRANSPARENT
+        } else {
+            Color.BLACK
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            window.attributes.layoutInDisplayCutoutMode =
+            window.attributes.layoutInDisplayCutoutMode = if (isChapterPage) {
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            } else {
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+            }
         }
     }
 }
