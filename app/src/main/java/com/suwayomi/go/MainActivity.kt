@@ -250,25 +250,30 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.setOnLongClickListener {
-            val result = webView.hitTestResult
-            if (result.type == WebView.HitTestResult.IMAGE_TYPE || result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
-                val imageUrl = result.extra
-                if (imageUrl != null) {
-                    val dialog = AlertDialog.Builder(this)
-                        .setTitle("保存图片")
-                        .setMessage("要下载这张漫画页面吗？")
-                        .setPositiveButton("下载") { _, _ -> saveImageToGallery(imageUrl) }
-                        .setNegativeButton("取消", null)
-                        .create()
-                    
-                    dialog.show()
-                    
-                    // 按钮颜色定制为 #3581b2 (Custom button color)
-                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
-                    dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
+            // 核心修改：仅在 URL 包含 "chapter" 字段时激活长按保存功能 (Activate long-press save only if URL contains "chapter")
+            val currentUrl = webView.url
+            if (currentUrl?.contains("chapter") == true) {
+                val result = webView.hitTestResult
+                if (result.type == WebView.HitTestResult.IMAGE_TYPE || result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+                    val imageUrl = result.extra
+                    if (imageUrl != null) {
+                        val dialog = AlertDialog.Builder(this)
+                            .setTitle("保存图片")
+                            .setMessage("要下载这张漫画页面吗？")
+                            .setPositiveButton("下载") { _, _ -> saveImageToGallery(imageUrl) }
+                            .setNegativeButton("取消", null)
+                            .create()
+                        
+                        dialog.show()
+                        
+                        // 按钮颜色定制为 #3581b2 (Custom button color)
+                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
+                        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
+                    }
+                    return@setOnLongClickListener true
                 }
-                true
-            } else false
+            }
+            false
         }
     }
 
