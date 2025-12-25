@@ -146,8 +146,11 @@ class MainActivity : AppCompatActivity() {
                 // 核心逻辑：页面刷新（或开始加载新页面）时触发动画并隐藏内容
                 // 确保“首次冷启动”和“页面刷新”都能看到加载效果 (Ensure load visibility on cold start/refresh)
                 webView.visibility = View.INVISIBLE
+                
+                // 每次开始加载新页面时，重置 tag 为 null，允许正常的“加载完成逻辑”触发 (Reset tag for new load)
+                loadingView.tag = null 
+
                 if (loadingView.visibility != View.VISIBLE) {
-                    loadingView.tag = null // 如果有正在运行的延迟任务，在此重置 (Reset tag if new load starts)
                     loadingView.visibility = View.VISIBLE
                     val pulse = AnimationUtils.loadAnimation(this@MainActivity, R.anim.pulse_animation)
                     loadingView.startAnimation(pulse)
@@ -166,18 +169,43 @@ class MainActivity : AppCompatActivity() {
                 if (view?.tag == "auth_failed") {
                     view.tag = null
                     handler?.cancel()
-                    if (!user.isNullOrEmpty()) {
-                        runOnUiThread {
-                            Toast.makeText(this@MainActivity, "验证失败，请检查账号密码", Toast.LENGTH_LONG).show()
-                            showConfigDialog()
+                    
+                    // 核心修改：在验证失败时，立即在 UI 线程隐藏 WebView 并显示加载动画，遮盖即将出现的错误页面
+                    // 同时通过设置特定的 tag，拦截 onProgressChanged 的“自动显示”逻辑
+                    // (Hide WebView and show loading on auth failure, lock tag to prevent reveal)
+                    runOnUiThread {
+                        webView.visibility = View.INVISIBLE
+                        loadingView.visibility = View.VISIBLE
+                        loadingView.tag = "error_lock" // 锁定加载状态，遮盖错误页
+
+                        if (loadingView.animation == null) {
+                            val pulse = AnimationUtils.loadAnimation(this@MainActivity, R.anim.pulse_animation)
+                            loadingView.startAnimation(pulse)
                         }
+
+                        if (!user.isNullOrEmpty()) {
+                            Toast.makeText(this@MainActivity, "验证失败，请检查账号密码", Toast.LENGTH_LONG).show()
+                        }
+                        showConfigDialog()
                     }
                 } else {
                     if (!user.isNullOrEmpty() && !pass.isNullOrEmpty()) {
                         view?.tag = "auth_failed"
                         handler?.proceed(user, pass)
                     } else {
-                        showConfigDialog()
+                        // 没有任何配置时也进行遮盖并弹出设置
+                        // (Cover and show config if no credentials)
+                        runOnUiThread {
+                            webView.visibility = View.INVISIBLE
+                            loadingView.visibility = View.VISIBLE
+                            loadingView.tag = "no_auth_lock"
+
+                            if (loadingView.animation == null) {
+                                val pulse = AnimationUtils.loadAnimation(this@MainActivity, R.anim.pulse_animation)
+                                loadingView.startAnimation(pulse)
+                            }
+                            showConfigDialog()
+                        }
                         handler?.cancel()
                     }
                 }
@@ -203,9 +231,18 @@ class MainActivity : AppCompatActivity() {
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                 if (request?.isForMainFrame == true) {
                     swipeRefresh.isRefreshing = false
-                    loadingView.clearAnimation()
-                    loadingView.visibility = View.GONE
-                    webView.visibility = View.VISIBLE
+                    
+                    // 核心修改：连接失败（包括验证取消）时，保持 WebView 隐藏，使用加载图遮盖原生的错误页面
+                    // (Keep WebView hidden and lock loading view on connection error)
+                    webView.visibility = View.INVISIBLE
+                    loadingView.visibility = View.VISIBLE
+                    loadingView.tag = "load_error_lock" // 标记错误状态，防止 onProgressChanged 将其显示
+
+                    if (loadingView.animation == null) {
+                        val pulse = AnimationUtils.loadAnimation(this@MainActivity, R.anim.pulse_animation)
+                        loadingView.startAnimation(pulse)
+                    }
+                    
                     Toast.makeText(this@MainActivity, "连接失败，请检查配置", Toast.LENGTH_LONG).show()
                     showConfigDialog()
                 }
