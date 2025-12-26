@@ -40,6 +40,7 @@ import androidx.core.net.toUri
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.core.view.isVisible
 import androidx.core.graphics.toColorInt
+import androidx.appcompat.widget.SwitchCompat
 import com.suwayomi.go.widget.WiperView
 
 
@@ -421,6 +422,9 @@ class MainActivity : AppCompatActivity() {
             .setTitle("服务器配置")
             .setView(view)
             .setCancelable(savedUrl.isNullOrEmpty().not())
+            .setNeutralButton("更多设置") { _, _ ->
+                showMoreSettingsDialog()
+            }
             .setPositiveButton("保存并进入") { _, _ ->
                 val url = editUrl.text.toString()
                 val user = editUser.text.toString()
@@ -449,6 +453,31 @@ class MainActivity : AppCompatActivity() {
         // 核心改动：在对话框显示后设置按钮颜色 (Set custom button color #3581b2 after show)
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor("#3581b2".toColorInt())
+    }
+
+    private fun showMoreSettingsDialog() {
+        val view = LayoutInflater.from(this).inflate(R.layout.more_settings, null)
+        val checkVolumePaging = view.findViewById<SwitchCompat>(R.id.checkVolumePaging)
+        
+        // 加载当前保存的状态 (Load saved state)
+        checkVolumePaging.isChecked = prefs.getBoolean("volume_paging", true)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(view)
+            .setPositiveButton("确定") { _, _ ->
+                prefs.edit {
+                    putBoolean("volume_paging", checkVolumePaging.isChecked)
+                }
+            }
+            .setNegativeButton("取消", null)
+            .create()
+
+        dialog.show()
+        
+        // 定制按钮颜色
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -458,20 +487,21 @@ class MainActivity : AppCompatActivity() {
         val isChapterPage = webView.url?.contains("chapter") == true
         if (!isChapterPage) return super.onKeyDown(keyCode, event)
 
-        // 优化 2：同步动画与换页逻辑。延迟执行模拟按键，确保换页动作发生在“光带”遮挡屏幕的瞬间。
-        // 原先 immediate 执行 simulateKey 无法起到掩盖作用。
-        val switchDelay = 400L // 动画扫到中间的时间点
+        val volumePagingEnabled = prefs.getBoolean("volume_paging", true)
+
+        // 优化 2：同步动画与换页逻辑。
+        val switchDelay = if (volumePagingEnabled) 400L else 0L
 
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                wiperView.startWipeAnimation(fromLeftToRight = false)
+                if (volumePagingEnabled) wiperView.startWipeAnimation(fromLeftToRight = false)
                 Handler(Looper.getMainLooper()).postDelayed({
                     simulateKey("ArrowRight", 39)
                 }, switchDelay)
                 return true
             }
             KeyEvent.KEYCODE_VOLUME_UP -> {
-                wiperView.startWipeAnimation(fromLeftToRight = true)
+                if (volumePagingEnabled) wiperView.startWipeAnimation(fromLeftToRight = true)
                 Handler(Looper.getMainLooper()).postDelayed({
                     simulateKey("ArrowLeft", 37)
                 }, switchDelay)
