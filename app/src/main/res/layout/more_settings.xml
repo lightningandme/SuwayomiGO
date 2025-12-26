@@ -37,6 +37,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="音量键翻页动画"
+                android:textSize="15sp"
                 android:checked="true"
                 android:padding="8dp"
                 tools:ignore="HardcodedText" />

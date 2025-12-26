@@ -52,6 +52,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loadingView: ImageView
     private lateinit var wiperView: WiperView
     private lateinit var prefs: SharedPreferences
+    private var isAutoProtocolFallback = false
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -122,7 +123,18 @@ class MainActivity : AppCompatActivity() {
 
                         if (isSuwayomi) {
                             loadingView.tag = "is_ending" // 标记正在处理结束逻辑
-                            // 实现要求：webview加载完成，加载动画任继续运行1秒 (Keep animation for 1s after load)
+                            
+                            // 核心修复：如果通过自动回退成功访问，将成功的 URL 保存回配置 (Save successful fallback URL to prefs)
+                            val currentUrl = view?.url
+                            if (!currentUrl.isNullOrEmpty()) {
+                                val savedUrl = prefs.getString("url", "")
+                                // 检查当前加载地址是否与保存的地址协议不同
+                                if (currentUrl != savedUrl && (currentUrl.startsWith("http://") || currentUrl.startsWith("https://"))) {
+                                    prefs.edit { putString("url", currentUrl) }
+                                }
+                            }
+
+                            // 实现要求：webview加载完成，加载动画任继续运行2秒 (Keep animation for 2s after load)
                             webView.postDelayed({
                                 // 再次检查进度，防止延迟期间用户又触发了新的刷新
                                 if (webView.progress == 100) {
@@ -132,11 +144,11 @@ class MainActivity : AppCompatActivity() {
                                     swipeRefresh.isRefreshing = false
                                 }
                                 loadingView.tag = null // 重置标记
-                            }, 1000)
+                            }, 2000)
                         } else {
                             // 验证失败：识别到非 Suwayomi 服务器 (Verification failed: Not a Suwayomi server)
                             runOnUiThread {
-                                Toast.makeText(this@MainActivity, "这个好像不是Suwayomi服务器", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this@MainActivity, "连接失败，请检查配置", Toast.LENGTH_LONG).show()
                                 webView.visibility = View.INVISIBLE
                                 loadingView.visibility = View.VISIBLE
                                 loadingView.tag = "verify_failed_lock" // 锁定加载状态
@@ -183,6 +195,7 @@ class MainActivity : AppCompatActivity() {
                 webView.visibility = View.INVISIBLE
                 
                 // 每次开始加载新页面时，重置 tag 为 null，允许正常的“加载完成逻辑”触发 (Reset tag for new load)
+                // 这也会清除回退过程中设置的临时 tag
                 loadingView.tag = null 
 
                 if (loadingView.visibility != View.VISIBLE) {
@@ -273,6 +286,22 @@ class MainActivity : AppCompatActivity() {
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                 if (request?.isForMainFrame == true) {
+                    val failingUrl = request.url.toString()
+                    
+                    // 核心修改：自动协议适应逻辑 (Auto-protocol adaptation logic)
+                    // 如果优先尝试的 https 失败了且之前没试过回退，则尝试回退到 http
+                    if (failingUrl.startsWith("https://") && !isAutoProtocolFallback) {
+                        isAutoProtocolFallback = true
+                        // 核心改动：标记正在回退中，防止错误页面的进度 100% 提前触发配置窗 (Mark fallback to prevent premature config dialog)
+                        loadingView.tag = "protocol_fallback"
+                        
+                        val fallbackUrl = failingUrl.replaceFirst("https://", "http://")
+                        view?.post { view.loadUrl(fallbackUrl) }
+                        return
+                    }
+                    
+                    // 彻底失败或无需回退时重置标记
+                    isAutoProtocolFallback = false
                     swipeRefresh.isRefreshing = false
                     
                     // 核心修改：连接失败（包括验证取消）时，保持 WebView 隐藏，使用加载图遮盖原生的错误页面
@@ -414,7 +443,8 @@ class MainActivity : AppCompatActivity() {
         val editPass = view.findViewById<EditText>(R.id.editPass)
 
         val savedUrl = prefs.getString("url", "")
-        editUrl.setText(if (savedUrl.isNullOrEmpty()) "https://" else savedUrl)
+        // 修改：初始不强制填充协议，保持整洁 (Keep input clean, don't force prefix)
+        editUrl.setText(savedUrl)
         editUser.setText(prefs.getString("user", ""))
         editPass.setText(prefs.getString("pass", ""))
 
@@ -425,24 +455,7 @@ class MainActivity : AppCompatActivity() {
             .setNeutralButton("更多设置") { _, _ ->
                 showMoreSettingsDialog()
             }
-            .setPositiveButton("保存并进入") { _, _ ->
-                val url = editUrl.text.toString()
-                val user = editUser.text.toString()
-                val pass = editPass.text.toString()
-
-                if (url.isNotEmpty()) {
-                    prefs.edit {
-                        putString("url", url)
-                        putString("user", user)
-                        putString("pass", pass)
-                    }
-
-                    WebViewDatabase.getInstance(this).clearHttpAuthUsernamePassword()
-                    webView.clearCache(true)
-                    webView.tag = null
-                    webView.loadUrl(url)
-                }
-            }
+            .setPositiveButton("保存并进入", null) // 设为 null，后面通过 setOnClickListener 重写以防止自动关闭
             .setNegativeButton("退出应用") { _, _ ->
                 finish()
             }
@@ -450,10 +463,45 @@ class MainActivity : AppCompatActivity() {
 
         dialog.show()
         
-        // 核心改动：在对话框显示后设置按钮颜色 (Set custom button color #3581b2 after show)
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
-        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor("#3581b2".toColorInt())
+        // 在 show() 之后获取按钮并设置逻辑，这样可以控制对话框不自动关闭 (Get buttons after show() to control dismissal manually)
+        val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        val negativeButton = dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+        val neutralButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
+
+        positiveButton.setTextColor("#3581b2".toColorInt())
+        negativeButton.setTextColor("#3581b2".toColorInt())
+        neutralButton.setTextColor("#3581b2".toColorInt())
+
+        positiveButton.setOnClickListener {
+            var url = editUrl.text.toString().trim()
+            val user = editUser.text.toString().trim()
+            val pass = editPass.text.toString().trim()
+
+            if (url.isEmpty()) {
+                // 当 URL 为空时提示，并不关闭对话框 (Toast if URL empty, keep dialog open)
+                Toast.makeText(this, "请输入服务器地址", Toast.LENGTH_SHORT).show()
+            } else {
+                // 核心修改：优先尝试 https，这是目前网页访问的标准 (Prioritize https by default)
+                if (!url.contains("://")) {
+                    url = "https://$url"
+                }
+
+                isAutoProtocolFallback = false // 新加载开始，重置回退标记
+                prefs.edit {
+                    putString("url", url)
+                    putString("user", user)
+                    putString("pass", pass)
+                }
+
+                WebViewDatabase.getInstance(this).clearHttpAuthUsernamePassword()
+                webView.clearCache(true)
+                webView.tag = null
+                webView.loadUrl(url)
+                
+                // 验证通过并开始加载后关闭对话框 (Dismiss dialog only after validation)
+                dialog.dismiss()
+            }
+        }
     }
 
     private fun showMoreSettingsDialog() {
