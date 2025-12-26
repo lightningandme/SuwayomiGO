@@ -108,21 +108,44 @@ class MainActivity : AppCompatActivity() {
         webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 super.onProgressChanged(view, newProgress)
-                // 当进度达到 100% 且加载视图可见时，启动延迟隐藏逻辑
-                // 优化：增加 tag 判定，防止重复提交延迟任务 (Avoid multiple delayed tasks)
+                // 当进度达到 100% 且加载视图可见时，启动验证与延迟隐藏逻辑
+                // (Trigger verification and delayed hide logic when progress is 100%)
                 if (newProgress == 100 && loadingView.isVisible && loadingView.tag == null) {
-                    loadingView.tag = "is_ending" // 标记正在处理结束逻辑
-                    // 实现要求：webview加载完成，加载动画任继续运行1秒 (Keep animation for 1s after load)
-                    webView.postDelayed({
-                        // 再次检查进度，防止延迟期间用户又触发了新的刷新
-                        if (webView.progress == 100) {
-                            webView.visibility = View.VISIBLE
-                            loadingView.clearAnimation() // 停止呼吸灯动画 (Stop Pulse Animation)
-                            loadingView.visibility = View.GONE
-                            swipeRefresh.isRefreshing = false
+                    loadingView.tag = "verifying" 
+                    
+                    performSuwayomiVerification(view) { isSuwayomi ->
+                        // 确保在验证期间没有发生新的页面加载 (Ensure no new load started during verification)
+                        if (loadingView.tag != "verifying") return@performSuwayomiVerification
+
+                        if (isSuwayomi) {
+                            loadingView.tag = "is_ending" // 标记正在处理结束逻辑
+                            // 实现要求：webview加载完成，加载动画任继续运行1秒 (Keep animation for 1s after load)
+                            webView.postDelayed({
+                                // 再次检查进度，防止延迟期间用户又触发了新的刷新
+                                if (webView.progress == 100) {
+                                    webView.visibility = View.VISIBLE
+                                    loadingView.clearAnimation() // 停止呼吸灯动画 (Stop Pulse Animation)
+                                    loadingView.visibility = View.GONE
+                                    swipeRefresh.isRefreshing = false
+                                }
+                                loadingView.tag = null // 重置标记
+                            }, 1000)
+                        } else {
+                            // 验证失败：识别到非 Suwayomi 服务器 (Verification failed: Not a Suwayomi server)
+                            runOnUiThread {
+                                Toast.makeText(this@MainActivity, "这个好像不是Suwayomi服务器", Toast.LENGTH_LONG).show()
+                                webView.visibility = View.INVISIBLE
+                                loadingView.visibility = View.VISIBLE
+                                loadingView.tag = "verify_failed_lock" // 锁定加载状态
+
+                                if (loadingView.animation == null) {
+                                    val pulse = AnimationUtils.loadAnimation(this@MainActivity, R.anim.pulse_animation)
+                                    loadingView.startAnimation(pulse)
+                                }
+                                showConfigDialog()
+                            }
                         }
-                        loadingView.tag = null // 重置标记
-                    }, 1000)
+                    }
                 }
             }
         }
@@ -291,6 +314,36 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             false
+        }
+    }
+
+    /**
+     * 执行 Suwayomi 服务器验证逻辑 (Execute Suwayomi server verification logic)
+     */
+    private fun performSuwayomiVerification(view: WebView?, callback: (Boolean) -> Unit) {
+        val js = """
+            (function() {
+                try {
+                    var scripts = document.getElementsByTagName('script');
+                    var foundMarker = false;
+                    for (var i = 0; i < scripts.length; i++) {
+                        if (scripts[i].textContent.indexOf('<<suwayomi-subpath-injection>>') !== -1) {
+                            foundMarker = true;
+                            break;
+                        }
+                    }
+                    var titleMatch = document.title.indexOf('Suwayomi') !== -1;
+                    var meta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+                    var metaMatch = meta && meta.content && meta.content.indexOf('Suwayomi') !== -1;
+                    return foundMarker || titleMatch || metaMatch;
+                } catch (e) {
+                    return false;
+                }
+            })();
+        """.trimIndent()
+
+        view?.evaluateJavascript(js) { result ->
+            callback(result == "true")
         }
     }
 
