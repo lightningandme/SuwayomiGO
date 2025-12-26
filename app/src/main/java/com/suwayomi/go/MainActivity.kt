@@ -20,6 +20,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.view.animation.AnimationUtils
+import android.webkit.CookieManager
 import android.webkit.HttpAuthHandler
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
@@ -27,6 +28,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebViewDatabase
@@ -486,20 +488,77 @@ class MainActivity : AppCompatActivity() {
                     url = "https://$url"
                 }
 
-                isAutoProtocolFallback = false // 新加载开始，重置回退标记
-                prefs.edit {
-                    putString("url", url)
-                    putString("user", user)
-                    putString("pass", pass)
-                }
+                // 获取原先储存的信息以进行比对 (Get previously stored info for comparison)
+                val oldUrl = prefs.getString("url", "")
+                val oldUser = prefs.getString("user", "")
+                val oldPass = prefs.getString("pass", "")
 
-                WebViewDatabase.getInstance(this).clearHttpAuthUsernamePassword()
-                webView.clearCache(true)
-                webView.tag = null
-                webView.loadUrl(url)
-                
-                // 验证通过并开始加载后关闭对话框 (Dismiss dialog only after validation)
-                dialog.dismiss()
+                // 识别是否有任何不一致 (Check if there's any inconsistency)
+                val isChanged = url != oldUrl || user != oldUser || pass != oldPass
+
+                if (isChanged) {
+                    // 核心逻辑：如果配置发生变更，放弃尝试立即生效，转而冻结界面并提示用户彻底重启 (Freeze UI and prompt restart if info changed)
+                    // 这应对 WebView 内存缓存顽疾的最稳妥策略。
+                    
+                    // 1. 立即保存新配置到存储 (Save new config immediately)
+                    prefs.edit {
+                        putString("url", url)
+                        putString("user", user)
+                        putString("pass", pass)
+                    }
+
+                    // 2. 彻底切断当前连接并冻结界面 (Sever current connection and freeze UI)
+                    webView.stopLoading()
+                    webView.visibility = View.GONE
+                    swipeRefresh.isEnabled = false
+                    
+                    // 3. 弹出无法取消的提示框以冻结操作 (Show non-dismissible prompt to freeze operations)
+                    val restartDialog = AlertDialog.Builder(this@MainActivity)
+                        .setTitle("配置已更新")
+                        .setMessage("应用即将退出，请手动重启！")
+                        .setCancelable(false) // 禁用取消，强制用户看到提示 (Force user to see the prompt)
+                        .setPositiveButton("好，我知道了") { _, _ ->
+                            // 核心修改：在确认重启后才执行基础清理 (Perform basic clear only after user confirmation)
+                            WebViewDatabase.getInstance(this@MainActivity).clearHttpAuthUsernamePassword()
+                            CookieManager.getInstance().removeAllCookies(null)
+                            CookieManager.getInstance().flush()
+                            WebStorage.getInstance().deleteAllData()
+                            webView.clearCache(true)
+                            webView.clearHistory()
+
+                            // 退出 Activity 组并杀死进程 (Exit activity affinity and kill process)
+                            finishAffinity()
+                            android.os.Process.killProcess(android.os.Process.myPid())
+                        }
+                        .setNegativeButton("不，我手滑了") { _, _ ->
+                            // 核心修改：恢复旧配置并恢复界面 (Restore old config and UI)
+                            prefs.edit {
+                                putString("url", oldUrl)
+                                putString("user", oldUser)
+                                putString("pass", oldPass)
+                            }
+                            webView.visibility = View.VISIBLE
+                            
+                            // 恢复刷新状态：根据旧 URL 逻辑同步 (Sync refresh state)
+                            val isChapterPage = oldUrl?.contains("chapter") == true
+                            swipeRefresh.isEnabled = !isChapterPage
+                            
+                            // 重新加载原 URL (Reload original URL)
+                            webView.loadUrl(oldUrl ?: "")
+                        }
+                        .show()
+                    
+                    // 定制按钮颜色
+                    restartDialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
+                    restartDialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
+                    
+                    // 关闭配置对话框 (Dismiss config dialog)
+                    dialog.dismiss()
+                } else {
+                    // 如果信息没有变化，正常执行加载
+                    webView.loadUrl(url)
+                    dialog.dismiss()
+                }
             }
         }
     }
