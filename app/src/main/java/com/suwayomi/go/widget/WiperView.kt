@@ -30,14 +30,24 @@ class WiperView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         screenWidth = w.toFloat()
 
-        // 定义渐变：透明 -> 纯白 -> 透明
-        // 渐变的宽度设计为屏幕宽度的3倍，这样移动起来更自然，两端的软边足够长
-        val colors = intArrayOf(Color.TRANSPARENT, Color.WHITE, Color.TRANSPARENT)
-        val positions = floatArrayOf(0f, 0.5f, 1f) // 中间是白色
+        // 优化 1: 颜色定义
+        // 使用纯白 (Color.WHITE) 在中间，两边是透明
+        // 之前如果是半透明白，遮挡效果就不够
+        val colors = intArrayOf(
+            Color.TRANSPARENT,
+            Color.WHITE,       // 核心区域：纯白，不透明
+            Color.WHITE,       // 核心区域加宽：连续两个纯白点
+            Color.TRANSPARENT
+        )
+
+        // 优化 2: 位置分布
+        // 调整 positions 让纯白区域占据中间的一定宽度，而不是仅仅一条线
+        // 例如：从 0.4 到 0.6 都是纯白，这样光带就有了“厚度”
+        val positions = floatArrayOf(0f, 0.35f, 0.65f, 1f)
 
         gradient = LinearGradient(
-            -screenWidth, 0f, // 渐变起点在屏幕左侧外
-            screenWidth * 2, 0f, // 渐变终点在屏幕右侧外
+            -screenWidth, 0f,
+            screenWidth * 2, 0f,
             colors,
             positions,
             Shader.TileMode.CLAMP
@@ -75,7 +85,7 @@ class WiperView @JvmOverloads constructor(
         val endProgress = if (fromLeftToRight) 1f else 0f
 
         ValueAnimator.ofFloat(startProgress, endProgress).apply {
-            duration = 1200 // 600ms 的扫描时间比较适中，既有翻页感又不拖沓
+            duration = 1000 // 600ms 的扫描时间比较适中，既有翻页感又不拖沓
             interpolator = AccelerateDecelerateInterpolator() // 先加速后减速，更自然
 
             addUpdateListener { animation ->

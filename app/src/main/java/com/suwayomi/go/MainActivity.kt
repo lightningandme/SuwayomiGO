@@ -10,6 +10,8 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import android.view.KeyEvent
 import android.view.LayoutInflater
@@ -450,17 +452,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // 核心用意：通过音量键实现翻页，并配合 WiperView 动画掩盖翻页时的视觉突变 (Use volume keys for paging with wiper animation)
+        
+        // 优化 1：仅在章节阅读页面拦截音量键，普通页面（如设置、书架）保留系统音量控制
+        val isChapterPage = webView.url?.contains("chapter") == true
+        if (!isChapterPage) return super.onKeyDown(keyCode, event)
+
+        // 优化 2：同步动画与换页逻辑。延迟执行模拟按键，确保换页动作发生在“光带”遮挡屏幕的瞬间。
+        // 原先 immediate 执行 simulateKey 无法起到掩盖作用。
+        val switchDelay = 350L // 动画扫到中间的时间点
+
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                // 执行反向动画 (下一页/向右)
                 wiperView.startWipeAnimation(fromLeftToRight = false)
-                simulateKey("ArrowRight", 39)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    simulateKey("ArrowRight", 39)
+                }, switchDelay)
                 return true
             }
             KeyEvent.KEYCODE_VOLUME_UP -> {
-                // 执行正向动画 (上一页/向左)
                 wiperView.startWipeAnimation(fromLeftToRight = true)
-                simulateKey("ArrowLeft", 37)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    simulateKey("ArrowLeft", 37)
+                }, switchDelay)
                 return true
             }
         }
