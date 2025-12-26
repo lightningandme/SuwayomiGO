@@ -460,7 +460,7 @@ class MainActivity : AppCompatActivity() {
 
         // 优化 2：同步动画与换页逻辑。延迟执行模拟按键，确保换页动作发生在“光带”遮挡屏幕的瞬间。
         // 原先 immediate 执行 simulateKey 无法起到掩盖作用。
-        val switchDelay = 350L // 动画扫到中间的时间点
+        val switchDelay = 400L // 动画扫到中间的时间点
 
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
