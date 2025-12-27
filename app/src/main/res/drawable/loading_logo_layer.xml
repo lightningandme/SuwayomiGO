@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 1. MyGO蓝色外圈 (MyGO Blue Outer Circle) -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#3581b2" />
+            <size android:width="200dp" android:height="200dp" />
+        </shape>
+    </item>
+
+    <!-- 2. 深蓝内圈 (Dark Blue Inner Circle) -->
+    <!-- 稍微减小内圈，为文字提供更深邃的背景感 -->
+    <item android:top="20dp" android:bottom="20dp" android:left="20dp" android:right="20dp">
+        <shape android:shape="oval">
+            <solid android:color="#252743" />
+        </shape>
+    </item>
+
+    <!-- 3. Logo字样 (Enlarged Logo/Text) -->
+    <!-- 关键优化：使用负数内边距 (Negative Insets) 强制放大矢量图 -->
+    <!-- 这会抵消矢量图内部自带的边距，使文字更加显眼 -->
+    <item
+        android:drawable="@drawable/loading_foreground"
+        android:gravity="center"
+        android:top="0dp"
+        android:bottom="0dp"
+        android:left="0dp"
+        android:right="0dp" />
+</layer-list>

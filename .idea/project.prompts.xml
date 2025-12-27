@@ -25,7 +25,7 @@
         <PromptTemplate>
           <option name="enabled" value="true" />
           <option name="name" value="实现功能" />
-          <option name="text" value="我想在$SELECTION的基础上实现这样的功能：" />
+          <option name="text" value="我想在这段代码【$SELECTION】的基础上实现这样的功能：" />
         </PromptTemplate>
         <PromptTemplate>
           <option name="enabled" value="true" />

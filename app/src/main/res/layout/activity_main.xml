@@ -13,8 +13,34 @@
         <WebView
             android:id="@+id/webview"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="match_parent"
+            android:visibility="invisible" />
 
+        <!--<com.suwayomi.go.widget.StripWiperView
+            android:id="@+id/wiperView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />-->
+
+        <View
+            android:id="@+id/flashView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#FFFFFF"
+            android:visibility="gone" />
+
+        <!-- 进阶方案：使用 ImageView 替代 ProgressBar 以支持自定义形状和呼吸灯动画 -->
+        <!-- 使用之前创建的 loading_logo_layer 资源，保证形状与应用 Logo 一致 -->
+        <ImageView
+            android:id="@+id/loadingProgress"
+            android:layout_width="160dp"
+            android:layout_height="160dp"
+            android:src="@drawable/loading_logo_layer"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:contentDescription="@string/app_name" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
