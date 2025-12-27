@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var loadingView: ImageView
     private lateinit var wiperView: StripWiperView
+    private lateinit var flashView: View
     private lateinit var prefs: SharedPreferences
     private var isAutoProtocolFallback = false
 
@@ -69,6 +70,7 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh = findViewById(R.id.swipeRefresh)
         loadingView = findViewById(R.id.loadingProgress)
         wiperView = findViewById(R.id.wiperView)
+        flashView = findViewById(R.id.flashView)
 
         setupWebView()
         setupSwipeRefresh()
@@ -597,21 +599,27 @@ class MainActivity : AppCompatActivity() {
         val volumePagingEnabled = prefs.getBoolean("volume_paging", true)
 
         // 优化 2：同步动画与换页逻辑。
-        val switchDelay = if (volumePagingEnabled) 300L else 0L
+        val switchDelay = if (volumePagingEnabled) 200L else 0L
 
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                if (volumePagingEnabled) wiperView.startWipeAnimation(fromLeftToRight = false)
+                if (volumePagingEnabled) flashView.visibility = View.VISIBLE
                 Handler(Looper.getMainLooper()).postDelayed({
                     simulateKey("ArrowRight", 39)
                 }, switchDelay)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    flashView.visibility = View.GONE
+                }, 500)
                 return true
             }
             KeyEvent.KEYCODE_VOLUME_UP -> {
-                if (volumePagingEnabled) wiperView.startWipeAnimation(fromLeftToRight = true)
+                if (volumePagingEnabled) flashView.visibility = View.VISIBLE
                 Handler(Looper.getMainLooper()).postDelayed({
                     simulateKey("ArrowLeft", 37)
                 }, switchDelay)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    flashView.visibility = View.GONE
+                }, 500)
                 return true
             }
         }

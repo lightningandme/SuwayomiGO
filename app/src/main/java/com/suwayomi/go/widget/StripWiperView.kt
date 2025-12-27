@@ -13,9 +13,9 @@ class StripWiperView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback {
 
-    private val stripCount = 1
+    private val stripCount = 3
     private val interval = 300L      // 墨水屏稍微慢点更稳
-    private val holdDuration = 500L
+    private val holdDuration = 800L
     private val whitePaint = Paint().apply { color = Color.WHITE }
 
     init {
