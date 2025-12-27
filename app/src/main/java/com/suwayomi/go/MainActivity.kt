@@ -37,13 +37,13 @@ import android.widget.ImageView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.edit
-import androidx.core.net.toUri
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import androidx.core.view.isVisible
-import androidx.core.graphics.toColorInt
 import androidx.appcompat.widget.SwitchCompat
-import com.suwayomi.go.widget.WiperView
+import androidx.core.content.edit
+import androidx.core.graphics.toColorInt
+import androidx.core.net.toUri
+import androidx.core.view.isVisible
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.suwayomi.go.widget.StripWiperView
 
 
 @Suppress("DEPRECATION")
@@ -52,7 +52,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var loadingView: ImageView
-    private lateinit var wiperView: WiperView
+    private lateinit var wiperView: StripWiperView
     private lateinit var prefs: SharedPreferences
     private var isAutoProtocolFallback = false
 
@@ -597,7 +597,7 @@ class MainActivity : AppCompatActivity() {
         val volumePagingEnabled = prefs.getBoolean("volume_paging", true)
 
         // 优化 2：同步动画与换页逻辑。
-        val switchDelay = if (volumePagingEnabled) 500L else 0L
+        val switchDelay = if (volumePagingEnabled) 300L else 0L
 
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {

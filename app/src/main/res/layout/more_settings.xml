@@ -36,7 +36,7 @@
                 android:id="@+id/checkVolumePaging"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="音量键翻页动画"
+                android:text="音量键翻页刷新（for E-Ink）"
                 android:textSize="15sp"
                 android:checked="true"
                 android:padding="8dp"
