@@ -39,7 +39,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/SuwayomiGO-${{ github.ref_name }}.apk
+          files: app/build/outputs/apk/release/*.apk
           name: SuwayomiGO ${{ github.ref_name }}
           # 【核心优化】自动填充自上个 Tag 以来合并的所有 PR 标题
           generate_release_notes: true
