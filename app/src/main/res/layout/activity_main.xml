@@ -16,10 +16,10 @@
             android:layout_height="match_parent"
             android:visibility="invisible" />
 
-        <com.suwayomi.go.widget.StripWiperView
+        <!--<com.suwayomi.go.widget.StripWiperView
             android:id="@+id/wiperView"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="match_parent" />-->
 
         <View
             android:id="@+id/flashView"

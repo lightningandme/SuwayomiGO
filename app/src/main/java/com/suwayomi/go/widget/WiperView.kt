@@ -1,5 +1,5 @@
 package com.suwayomi.go.widget
-
+/*
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
@@ -9,6 +9,7 @@ import android.util.AttributeSet
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 
+//翻页动画备胎1：光晕横扫
 class WiperView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
@@ -106,3 +107,4 @@ class WiperView @JvmOverloads constructor(
         }
     }
 }
+*/

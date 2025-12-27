@@ -43,7 +43,7 @@ import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import com.suwayomi.go.widget.StripWiperView
+//import com.suwayomi.go.widget.StripWiperView
 
 
 @Suppress("DEPRECATION")
@@ -52,7 +52,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var loadingView: ImageView
-    private lateinit var wiperView: StripWiperView
+    //private lateinit var wiperView: StripWiperView
     private lateinit var flashView: View
     private lateinit var prefs: SharedPreferences
     private var isAutoProtocolFallback = false
@@ -69,7 +69,7 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webview)
         swipeRefresh = findViewById(R.id.swipeRefresh)
         loadingView = findViewById(R.id.loadingProgress)
-        wiperView = findViewById(R.id.wiperView)
+        //wiperView = findViewById(R.id.wiperView)
         flashView = findViewById(R.id.flashView)
 
         setupWebView()
@@ -495,8 +495,8 @@ class MainActivity : AppCompatActivity() {
                 val oldUser = prefs.getString("user", "")
                 val oldPass = prefs.getString("pass", "")
 
-                // 识别是否有任何不一致 (Check if there's any inconsistency)
-                val isChanged = url != oldUrl || user != oldUser || pass != oldPass
+                // 核心修改：增加例外，若原先 URL 为空（首次配置），不视为“变更”触发重启逻辑 (Exception: If oldUrl is empty, don't trigger restart logic)
+                val isChanged = !oldUrl.isNullOrEmpty() && (url != oldUrl || user != oldUser || pass != oldPass)
 
                 if (isChanged) {
                     // 核心逻辑：如果配置发生变更，放弃尝试立即生效，转而冻结界面并提示用户彻底重启 (Freeze UI and prompt restart if info changed)
@@ -542,11 +542,11 @@ class MainActivity : AppCompatActivity() {
                             webView.visibility = View.VISIBLE
                             
                             // 恢复刷新状态：根据旧 URL 逻辑同步 (Sync refresh state)
-                            val isChapterPage = oldUrl?.contains("chapter") == true
+                            val isChapterPage = oldUrl.contains("chapter")
                             swipeRefresh.isEnabled = !isChapterPage
                             
                             // 重新加载原 URL (Reload original URL)
-                            webView.loadUrl(oldUrl ?: "")
+                            webView.loadUrl(oldUrl)
                         }
                         .show()
                     
@@ -557,7 +557,13 @@ class MainActivity : AppCompatActivity() {
                     // 关闭配置对话框 (Dismiss config dialog)
                     dialog.dismiss()
                 } else {
-                    // 如果信息没有变化，正常执行加载
+                    // 核心修改：在此处也执行保存，确保首次配置或无变更加载时，信息也能被持久化 (Ensure persistence on first-time config)
+                    prefs.edit {
+                        putString("url", url)
+                        putString("user", user)
+                        putString("pass", pass)
+                    }
+                    // 如果信息没有变化或为首次配置，正常执行加载
                     webView.loadUrl(url)
                     dialog.dismiss()
                 }

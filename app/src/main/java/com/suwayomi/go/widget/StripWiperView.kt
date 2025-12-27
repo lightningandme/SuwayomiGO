@@ -1,5 +1,5 @@
 package com.suwayomi.go.widget
-
+/*
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Paint
@@ -9,6 +9,7 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import kotlin.concurrent.thread
 
+//翻页动画备胎2：条块刷新
 class StripWiperView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback {
@@ -77,3 +78,4 @@ class StripWiperView @JvmOverloads constructor(
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
     override fun surfaceDestroyed(holder: SurfaceHolder) {}
 }
+*/
