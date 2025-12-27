@@ -35,13 +35,7 @@ jobs:
           -Pandroid.injected.signing.key.alias=${{ secrets.ALIAS }} \
           -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-      # 1. 重新启用重命名，使用变量让文件名更具辨识度
-      - name: Rename APK
-        run: |
-          cd app/build/outputs/apk/release/
-          mv *.apk SuwayomiGO-${{ github.ref_name }}.apk
-
-      # 2. 修改 Create Release 步骤，加入自动日志生成
+      # 1. 修改 Create Release 步骤，加入自动日志生成
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -54,7 +48,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 3. 清理敏感文件（安全优化）
+      # 2. 清理敏感文件（安全优化）
       - name: Clean up
         if: always()
         run: rm -f release.jks
