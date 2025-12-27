@@ -43,7 +43,7 @@ class WiperView @JvmOverloads constructor(
         // 优化 2: 位置分布
         // 调整 positions 让纯白区域占据中间的一定宽度，而不是仅仅一条线
         // 例如：从 0.4 到 0.6 都是纯白，这样光带就有了“厚度”
-        val positions = floatArrayOf(0f, 0.35f, 0.65f, 1f)
+        val positions = floatArrayOf(0f, 0.4f, 0.6f, 1f)
 
         gradient = LinearGradient(
             -screenWidth, 0f,
