@@ -1,12 +1,16 @@
-# SuwayomiGO 🚀
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?logo=github&style=flat-square)](https://github.com/lightningandme/SuwayomiGO)
+<div align="center">
+<h1 align="center" style="margin-top: 0">SuwayomiGO</h1>
+  
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github)](https://github.com/lightningandme/SuwayomiGO)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/lightningandme/SuwayomiGO?label=version&color=orange)](https://github.com/lightningandme/SuwayomiGO/releases)
+[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/lightningandme/SuwayomiGO?label=download&color=green)](https://github.com/lightningandme/SuwayomiGO/releases)
+
+</div>
 
 SuwayomiGO 是一个轻量化的安卓漫画阅读器。需要搭配漫画服务器 [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server)（一个免费、开源、跨平台的漫画服务器，原名 Tachidesk）
 使用，本质上是通过系统WebView访问 [Suwayomi-WebUI](https://github.com/Suwayomi/Suwayomi-WebUI) 并浏览漫画的套壳客户端，在此基础上增强了一些体验。
 
-### ✨ 核心功能
+## ✨ 核心功能
 - 🔒 **自动登录**：支持保存 Basic Auth 凭据，自动完成服务器验证。
 - 📖 **物理翻页**：支持使用音量键直接翻页，适配移动设备的物理按键。
 - 🖼️ **长按保存**：支持直接将漫画页长按保存至本地相册。
