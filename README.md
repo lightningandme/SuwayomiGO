@@ -1,4 +1,6 @@
 # SuwayomiGO 🚀
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?logo=github&style=flat-square)](https://github.com/lightningandme/SuwayomiGO)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/lightningandme/SuwayomiGO?label=version&color=orange)](https://github.com/lightningandme/SuwayomiGO/releases)
 
 SuwayomiGO 是一个轻量化的安卓漫画阅读器。需要搭配漫画服务器 [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server)（一个免费、开源、跨平台的漫画服务器，原名 Tachidesk）
