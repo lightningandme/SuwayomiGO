@@ -56,6 +56,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var flashView: View
     private lateinit var prefs: SharedPreferences
     private var isAutoProtocolFallback = false
+    // 标记位：用于区分长按是否已被处理 (Flag to track if long press was handled)
+    private var isLongPressHandled = false
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -596,15 +598,60 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // 核心用意：通过音量键实现翻页，并配合 WiperView 动画掩盖翻页时的视觉突变 (Use volume keys for paging with wiper animation)
+        // 核心用意：通过音量键实现翻页，并配合 flashView 动画掩盖翻页时的视觉突变 (Use volume keys for paging with flash animation)
         
         // 优化 1：仅在章节阅读页面拦截音量键，普通页面（如设置、书架）保留系统音量控制
         val isChapterPage = webView.url?.contains("chapter") == true
-        if (!isChapterPage) return super.onKeyDown(keyCode, event)
+        if (isChapterPage && (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)) {
+            // 启用长按追踪 (Enable tracking for long press)
+            event?.startTracking()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
 
+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
+        val isChapterPage = webView.url?.contains("chapter") == true
+        if (isChapterPage) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                    isLongPressHandled = true
+                    // 这里可以实现长按音量下的功能，例如直接跳转到下一章
+                    // (Handle long press volume down, e.g., skip to next chapter)
+                    Toast.makeText(this, "长按音量下：下一章 (示例)", Toast.LENGTH_SHORT).show()
+                    return true
+                }
+                KeyEvent.KEYCODE_VOLUME_UP -> {
+                    isLongPressHandled = true
+                    // 这里可以实现长按音量上的功能，例如直接跳转到上一章
+                    // (Handle long press volume up, e.g., skip to previous chapter)
+                    Toast.makeText(this, "长按音量上：上一章 (示例)", Toast.LENGTH_SHORT).show()
+                    return true
+                }
+            }
+        }
+        return super.onKeyLongPress(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        val isChapterPage = webView.url?.contains("chapter") == true
+        if (isChapterPage && (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)) {
+            // 如果本次点击没有被长按逻辑处理，则执行短按翻页
+            // (If not handled by long press, execute short press paging)
+            if (!isLongPressHandled) {
+                handleShortPressPaging(keyCode)
+            }
+            isLongPressHandled = false // 重置标记 (Reset flag)
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+
+    /**
+     * 处理短按翻页逻辑 (Handle short press paging logic)
+     */
+    private fun handleShortPressPaging(keyCode: Int) {
         val volumePagingEnabled = prefs.getBoolean("volume_paging", true)
-
-        // 优化 2：同步动画与换页逻辑。
         val switchDelay = if (volumePagingEnabled) 100L else 0L
 
         when (keyCode) {
@@ -616,7 +663,6 @@ class MainActivity : AppCompatActivity() {
                 Handler(Looper.getMainLooper()).postDelayed({
                     flashView.visibility = View.GONE
                 }, 400)
-                return true
             }
             KeyEvent.KEYCODE_VOLUME_UP -> {
                 if (volumePagingEnabled) flashView.visibility = View.VISIBLE
@@ -626,10 +672,8 @@ class MainActivity : AppCompatActivity() {
                 Handler(Looper.getMainLooper()).postDelayed({
                     flashView.visibility = View.GONE
                 }, 400)
-                return true
             }
         }
-        return super.onKeyDown(keyCode, event)
     }
 
     private fun simulateKey(keyName: String, keyCode: Int) {
