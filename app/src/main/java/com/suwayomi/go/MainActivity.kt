@@ -605,7 +605,7 @@ class MainActivity : AppCompatActivity() {
         val volumePagingEnabled = prefs.getBoolean("volume_paging", true)
 
         // 优化 2：同步动画与换页逻辑。
-        val switchDelay = if (volumePagingEnabled) 200L else 0L
+        val switchDelay = if (volumePagingEnabled) 100L else 0L
 
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
@@ -615,7 +615,7 @@ class MainActivity : AppCompatActivity() {
                 }, switchDelay)
                 Handler(Looper.getMainLooper()).postDelayed({
                     flashView.visibility = View.GONE
-                }, 500)
+                }, 400)
                 return true
             }
             KeyEvent.KEYCODE_VOLUME_UP -> {
@@ -625,7 +625,7 @@ class MainActivity : AppCompatActivity() {
                 }, switchDelay)
                 Handler(Looper.getMainLooper()).postDelayed({
                     flashView.visibility = View.GONE
-                }, 500)
+                }, 400)
                 return true
             }
         }
