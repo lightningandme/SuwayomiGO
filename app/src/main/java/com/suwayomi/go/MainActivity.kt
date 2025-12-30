@@ -302,6 +302,11 @@ class MainActivity : AppCompatActivity() {
                 // 历史记录更新时同步刷新状态 (Sync refresh state on history update)
                 val isChapterPage = url?.contains("chapter") == true
                 swipeRefresh.isEnabled = webView.scrollY == 0 && !isChapterPage
+
+                // 关键修复：在历史记录变更（包括单页应用路由跳转）时，如果离开章节页面，则重置 OCR 状态
+                if (!isChapterPage) {
+                    isOcrEnabled = false
+                }
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
@@ -380,6 +385,9 @@ class MainActivity : AppCompatActivity() {
     private fun setupMangaOcrTouch() {
         // 使用 _ 替换未使用的参数 v (Replace unused parameter 'v' with '_')
         webView.setOnTouchListener { _, event ->
+            // 检查当前是否在章节页面 (Check if current page is a chapter page)
+            val isChapterPage = webView.url?.contains("chapter") == true
+
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     // 记录手指按下的位置
@@ -406,10 +414,15 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // 【关键点】这里必须返回 false！
-            // 这样点击/滑动事件才会继续向下传递给 WebView 内部的网页逻辑，
-            // 从而保证你原有的翻页、长按、双击等功能依然正常工作。
-            false
+            // 【关键逻辑修改】
+            // 如果 OCR 模式已开启且处于章节页面，返回 true 拦截所有触摸事件 (Consumes events to block WebView interaction)
+            // 这样用户在 OCR 模式下无法通过滑动或点击进行翻页。
+            // 否则返回 false，让 WebView 正常处理交互。
+            if (isOcrEnabled && isChapterPage) {
+                true
+            } else {
+                false
+            }
         }
     }
     /**
