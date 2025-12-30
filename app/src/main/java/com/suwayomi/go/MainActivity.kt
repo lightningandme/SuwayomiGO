@@ -13,8 +13,10 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
+import android.util.Log
 import android.view.KeyEvent
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -43,7 +45,7 @@ import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-//import com.suwayomi.go.widget.StripWiperView
+import kotlin.math.abs
 
 
 @Suppress("DEPRECATION")
@@ -52,12 +54,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var loadingView: ImageView
-    //private lateinit var wiperView: StripWiperView
     private lateinit var flashView: View
     private lateinit var prefs: SharedPreferences
     private var isAutoProtocolFallback = false
     // 标记位：用于区分长按是否已被处理 (Flag to track if long press was handled)
     private var isLongPressHandled = false
+    
+    // 核心修改：OCR 模式开关标记 (OCR mode toggle flag)
+    private var isOcrEnabled = false
+
+    private lateinit var ocrManager: MangaOcrManager
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,12 +77,15 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webview)
         swipeRefresh = findViewById(R.id.swipeRefresh)
         loadingView = findViewById(R.id.loadingProgress)
-        //wiperView = findViewById(R.id.wiperView)
         flashView = findViewById(R.id.flashView)
+
+        // 初始化 OCR 管理类
+        ocrManager = MangaOcrManager(webView)
 
         setupWebView()
         setupSwipeRefresh()
         setupBackNavigation()
+        setupMangaOcrTouch()
 
         // 检查配置，如果没有 URL，则弹出设置
         val savedUrl = prefs.getString("url", "")
@@ -195,6 +204,11 @@ class MainActivity : AppCompatActivity() {
                 // 核心修改：根据当前 URL 状态同步下拉刷新的启用状态 (Sync swipe refresh state based on URL)
                 val isChapterPage = url?.contains("chapter") == true
                 swipeRefresh.isEnabled = !isChapterPage
+                
+                // 核心逻辑：退出章节页面时自动关闭 OCR 监听状态 (Automatically disable OCR mode when leaving chapter)
+                if (!isChapterPage) {
+                    isOcrEnabled = false
+                }
 
                 // 核心逻辑：页面刷新（或开始加载新页面）时触发动画并隐藏内容
                 // 确保“首次冷启动”和“页面刷新”都能看到加载效果 (Ensure load visibility on cold start/refresh)
@@ -353,8 +367,51 @@ class MainActivity : AppCompatActivity() {
             }
             false
         }
+
+
     }
 
+    // 定义点击判定的阈值，防止滑动翻页时误触发截图
+    private var lastDownX = 0f
+    private var lastDownY = 0f
+    private val clickTHRESHOLD = 10f
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupMangaOcrTouch() {
+        // 使用 _ 替换未使用的参数 v (Replace unused parameter 'v' with '_')
+        webView.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    // 记录手指按下的位置
+                    lastDownX = event.x
+                    lastDownY = event.y
+                }
+                MotionEvent.ACTION_UP -> {
+                    // 计算手指抬起与按下的距离偏移
+                    val deltaX = abs(event.x - lastDownX)
+                    val deltaY = abs(event.y - lastDownY)
+
+                    // 核心修改：只有在 OCR 模式开启且是“点按”时才触发逻辑 (Trigger only if OCR mode is enabled and it's a click)
+                    if (isOcrEnabled && deltaX < clickTHRESHOLD && deltaY < clickTHRESHOLD) {
+                        val x = event.x.toInt()
+                        val y = event.y.toInt()
+
+                        Log.d("MangaOcr", "检测到点按: ($x, $y)，启动切图...")
+
+                        // 调用 Manager 进行切图测试
+                        ocrManager.processCrop(x, y) { base64 ->
+                            Log.d("MangaOcr", "切图 Base64 已生成，长度: ${base64.length}")
+                        }
+                    }
+                }
+            }
+
+            // 【关键点】这里必须返回 false！
+            // 这样点击/滑动事件才会继续向下传递给 WebView 内部的网页逻辑，
+            // 从而保证你原有的翻页、长按、双击等功能依然正常工作。
+            false
+        }
+    }
     /**
      * 执行 Suwayomi 服务器验证逻辑 (Execute Suwayomi server verification logic)
      */
@@ -623,9 +680,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 KeyEvent.KEYCODE_VOLUME_UP -> {
                     isLongPressHandled = true
-                    // 这里可以实现长按音量上的功能，例如直接跳转到上一章
-                    // (Handle long press volume up, e.g., skip to previous chapter)
-                    Toast.makeText(this, "长按音量上：上一章 (示例)", Toast.LENGTH_SHORT).show()
+                    // 核心修改：长按音量上切换 OCR 模式状态 (Toggle OCR mode on volume up long press)
+                    isOcrEnabled = !isOcrEnabled
+                    val statusText = if (isOcrEnabled) "OCR 模式已开启" else "OCR 模式已关闭"
+                    Toast.makeText(this, statusText, Toast.LENGTH_SHORT).show()
                     return true
                 }
             }
