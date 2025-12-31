@@ -23,23 +23,52 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.OutputStream
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import android.view.LayoutInflater
+import android.widget.TextView
+import android.widget.LinearLayout
+import android.widget.Button
+import android.widget.Toast
+import android.content.ClipboardManager
+import android.os.Handler
+import android.os.Looper
+import androidx.core.graphics.toColorInt
 
 /**
  * 专门处理漫画 OCR 逻辑的管理类
  */
 // 定义单词数据结构
 data class JapaneseWord(
-    val surface: String,  // 原文
-    val baseForm: String, // 原型
-    val pos: String,      // 词性
-    val reading: String   // 读音
+    val surface: String,
+    val baseForm: String,
+    val pos: String,
+    val reading: String
 )
 
-// 定义整个 OCR 结果
 data class OcrResponse(
     val text: String,
     val words: List<JapaneseWord>
-)
+) {
+    companion object {
+        fun fromJson(jsonString: String): OcrResponse {
+            val json = JSONObject(jsonString)
+            val text = json.optString("text", "")
+            val wordsArray = json.getJSONArray("words")
+            val wordList = mutableListOf<JapaneseWord>()
+
+            for (i in 0 until wordsArray.length()) {
+                val w = wordsArray.getJSONObject(i)
+                wordList.add(JapaneseWord(
+                    surface = w.optString("s"),
+                    baseForm = w.optString("b"),
+                    pos = w.optString("p"),
+                    reading = w.optString("r")
+                ))
+            }
+            return OcrResponse(text, wordList)
+        }
+    }
+}
 class MangaOcrManager(private val webView: WebView) {
 
     // 定义切图大小
@@ -86,51 +115,42 @@ class MangaOcrManager(private val webView: WebView) {
         Log.d("MangaOcr", "正在发送请求到: $serverUrl")
 
         client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e("MangaOcr", "网络请求失败: ${e.message}")
-            }
-
             override fun onResponse(call: Call, response: Response) {
+                // .use 会自动关闭 response，防止内存泄漏
                 response.use {
-                    if (!response.isSuccessful) return
+                    if (!response.isSuccessful) {
+                        Log.e("MangaOcr", "服务器返回错误: ${response.code}")
+                        return
+                    }
 
-                    val responseBody = response.body?.string() ?: ""
+                    // 1. 获取后端返回的 JSON 字符串
+                    val bodyString = response.body?.string() ?: ""
+
+                    if (bodyString.isEmpty()) {
+                        Log.e("MangaOcr", "服务器返回内容为空")
+                        return
+                    }
+
                     try {
-                        val jsonObject = JSONObject(responseBody)
-                        if (jsonObject.getString("status") == "success") {
-                            val fullText = jsonObject.getString("text")
-                            val wordsArray = jsonObject.getJSONArray("words")
+                        // 2. 解析 JSON 到 OcrResponse 对象
+                        val ocrResult = OcrResponse.fromJson(bodyString)
 
-                            val wordList = mutableListOf<JapaneseWord>()
+                        Log.d("MangaOcrResult", "成功识别: ${ocrResult.text}")
 
-                            // 遍历解析 words 数组
-                            for (i in 0 until wordsArray.length()) {
-                                val wJson = wordsArray.getJSONObject(i)
-                                wordList.add(
-                                    JapaneseWord(
-                                        surface = wJson.optString("s"),
-                                        baseForm = wJson.optString("b"),
-                                        pos = wJson.optString("p"),
-                                        reading = wJson.optString("r")
-                                    )
-                                )
-                            }
-
-                            // --- 打印调试信息 ---
-                            Log.d("MangaOcrResult", "原文: $fullText")
-                            Log.d("MangaOcrResult", "分词详情:")
-                            wordList.forEach { word ->
-                                // 重点看这个打印，b 是原型，p 是词性
-                                Log.d("MangaOcrResult", "  -> ${word.surface} [原型: ${word.baseForm}] (${word.pos})")
-                            }
-
-                            // 这里是后续 UI 显示的入口
-                            // showResultInPopup(fullText, wordList)
+                        // 3. 切换回主线程 (UI Thread) 来显示 BottomSheet
+                        Handler(Looper.getMainLooper()).post {
+                            showResultBottomSheet(ocrResult)
                         }
+
                     } catch (e: Exception) {
                         Log.e("MangaOcr", "JSON 解析失败: ${e.message}")
+                        e.printStackTrace()
                     }
                 }
+            }
+
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("MangaOcr", "网络请求失败: ${e.message}")
             }
         })
     }
@@ -180,6 +200,65 @@ class MangaOcrManager(private val webView: WebView) {
         } catch (e: Exception) {
             Log.e("MangaOcr", "保存失败: ${e.message}")
             uri?.let { resolver.delete(it, null, null) }
+        }
+    }
+
+    private fun showResultBottomSheet(result: OcrResponse) {
+        // 切换到主线程操作 UI
+        Handler(Looper.getMainLooper()).post {
+            val context = webView.context
+            val dialog = BottomSheetDialog(context)
+            val view = LayoutInflater.from(context).inflate(R.layout.layout_ocr_result, null)
+
+            val tvFullOcr = view.findViewById<TextView>(R.id.text_full_ocr)
+            val containerWords = view.findViewById<LinearLayout>(R.id.container_words)
+            val btnCopy = view.findViewById<Button>(R.id.btn_copy)
+
+            tvFullOcr.text = result.text
+
+// 动态添加单词卡片
+            result.words.forEach { word ->
+                val wordView = TextView(context).apply {
+                    // 表面形 (换行) 原型
+                    text = "${word.surface}\n[${word.baseForm}]"
+
+                    // 修复 sp 报错：直接赋值 12f，系统默认单位就是 SP
+                    textSize = 12f
+
+                    setTextColor(android.graphics.Color.BLACK)
+                    setPadding(30, 15, 30, 15)
+
+                    // 给卡片加一个简单的背景边框
+                    val shape = android.graphics.drawable.GradientDrawable().apply {
+                        setColor("#F5F5F5".toColorInt()) // 浅灰色背景
+                        cornerRadius = 8f // 圆角
+                        setStroke(2, "#CCCCCC".toColorInt()) // 灰色边框
+                    }
+                    background = shape
+
+                    setOnClickListener {
+                        Toast.makeText(context, "词性: ${word.pos}\n读音: ${word.reading}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                val params = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    setMargins(0, 0, 20, 0) // 单词之间的间距
+                }
+                containerWords.addView(wordView, params)
+            }
+
+            btnCopy.setOnClickListener {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = android.content.ClipData.newPlainText("OCR Result", result.text)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+            }
+
+            dialog.setContentView(view)
+            dialog.show()
         }
     }
 }
