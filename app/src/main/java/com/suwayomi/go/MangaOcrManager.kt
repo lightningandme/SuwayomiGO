@@ -27,6 +27,19 @@ import java.io.OutputStream
 /**
  * 专门处理漫画 OCR 逻辑的管理类
  */
+// 定义单词数据结构
+data class JapaneseWord(
+    val surface: String,  // 原文
+    val baseForm: String, // 原型
+    val pos: String,      // 词性
+    val reading: String   // 读音
+)
+
+// 定义整个 OCR 结果
+data class OcrResponse(
+    val text: String,
+    val words: List<JapaneseWord>
+)
 class MangaOcrManager(private val webView: WebView) {
 
     // 定义切图大小
@@ -79,28 +92,44 @@ class MangaOcrManager(private val webView: WebView) {
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
-                    if (!response.isSuccessful) {
-                        Log.e("MangaOcr", "服务器返回错误: ${response.code}")
-                        return
-                    }
+                    if (!response.isSuccessful) return
 
-                    // Use ?. to safely access body and provide a fallback empty string
-                    val resultJson = response.body?.string() ?: ""
+                    val responseBody = response.body?.string() ?: ""
+                    try {
+                        val jsonObject = JSONObject(responseBody)
+                        if (jsonObject.getString("status") == "success") {
+                            val fullText = jsonObject.getString("text")
+                            val wordsArray = jsonObject.getJSONArray("words")
 
-                    if (resultJson.isNotEmpty()) {
-                        val text = JSONObject(resultJson).optString("text", "")
-                        Log.d("MangaOcr", "--- 识别成功 ---")
-                        Log.d("MangaOcr", "原文内容: $text")
-                    } else {
-                        Log.e("MangaOcr", "响应体为空")
-                    }
+                            val wordList = mutableListOf<JapaneseWord>()
 
-                    // 如果需要在主线程处理结果（如弹窗），请解开下面注释
-                    /*
-                    Handler(Looper.getMainLooper()).post {
-                        // 在这里更新 UI
+                            // 遍历解析 words 数组
+                            for (i in 0 until wordsArray.length()) {
+                                val wJson = wordsArray.getJSONObject(i)
+                                wordList.add(
+                                    JapaneseWord(
+                                        surface = wJson.optString("s"),
+                                        baseForm = wJson.optString("b"),
+                                        pos = wJson.optString("p"),
+                                        reading = wJson.optString("r")
+                                    )
+                                )
+                            }
+
+                            // --- 打印调试信息 ---
+                            Log.d("MangaOcrResult", "原文: $fullText")
+                            Log.d("MangaOcrResult", "分词详情:")
+                            wordList.forEach { word ->
+                                // 重点看这个打印，b 是原型，p 是词性
+                                Log.d("MangaOcrResult", "  -> ${word.surface} [原型: ${word.baseForm}] (${word.pos})")
+                            }
+
+                            // 这里是后续 UI 显示的入口
+                            // showResultInPopup(fullText, wordList)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MangaOcr", "JSON 解析失败: ${e.message}")
                     }
-                    */
                 }
             }
         })
