@@ -11,9 +11,18 @@ import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
 import android.webkit.WebView
-import java.io.ByteArrayOutputStream
-import java.io.OutputStream
 import androidx.core.graphics.createBitmap
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.io.OutputStream
 
 /**
  * 专门处理漫画 OCR 逻辑的管理类
@@ -22,40 +31,79 @@ class MangaOcrManager(private val webView: WebView) {
 
     // 定义切图大小
     private val cropSize = 400
-
+    private val client = OkHttpClient() // 单例客户端
+    private val serverUrl = "http://192.168.137.1:12233/ocr" // 替换为你的真实IP
     /**
      * 执行局部切图的核心函数
      * @param clickX 点击的 X 坐标
      * @param clickY 点击的 Y 坐标
-     * @param onBitmapReady 成功切图后的回调，返回 Base64 字符串
      */
-    fun processCrop(clickX: Int, clickY: Int, onBitmapReady: (String) -> Unit) {
+    fun processCrop(clickX: Int, clickY: Int) {
         if (webView.width <= 0 || webView.height <= 0) return
 
-        // 1. 创建与 WebView 等大的 Bitmap
         val fullBitmap = createBitmap(webView.width, webView.height)
-
-        // 2. 抓取画面：WebView 无法直接传给 PixelCopy.request
-        // 使用 Canvas 绘制方式更通用且兼容 API 24
         val canvas = Canvas(fullBitmap)
         webView.draw(canvas)
 
-        // 3. 计算裁剪范围并增加越界保护
         val half = cropSize / 2
         val actualWidth = cropSize.coerceAtMost(webView.width)
         val actualHeight = cropSize.coerceAtMost(webView.height)
         val left = (clickX - half).coerceIn(0, (webView.width - actualWidth).coerceAtLeast(0))
         val top = (clickY - half).coerceIn(0, (webView.height - actualHeight).coerceAtLeast(0))
 
-        // 4. 执行裁剪
         val cropped = Bitmap.createBitmap(fullBitmap, left, top, actualWidth, actualHeight)
 
-        // 【调试代码】保存到相册
-        val timestamp = System.currentTimeMillis()
-        saveBitmapToDownload(webView.context, cropped, "crop_$timestamp")
+        // 1. 调试用：保存到本地
+        saveBitmapToDownload(webView.context, cropped, "crop_${System.currentTimeMillis()}")
 
-        // 5. 转码并回调给主界面
-        onBitmapReady(bitmapToBase64(cropped))
+        // 2. 转码并发送
+        val base64String = bitmapToBase64(cropped)
+        sendToOcrServer(base64String)
+    }
+
+    private fun sendToOcrServer(base64Image: String) {
+        // 构建请求体 JSON
+        val json = JSONObject().apply {
+            put("image", base64Image)
+        }.toString()
+
+        val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = Request.Builder().url(serverUrl).post(body).build()
+
+        Log.d("MangaOcr", "正在发送请求到: $serverUrl")
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("MangaOcr", "网络请求失败: ${e.message}")
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) {
+                        Log.e("MangaOcr", "服务器返回错误: ${response.code}")
+                        return
+                    }
+
+                    // Use ?. to safely access body and provide a fallback empty string
+                    val resultJson = response.body?.string() ?: ""
+
+                    if (resultJson.isNotEmpty()) {
+                        val text = JSONObject(resultJson).optString("text", "")
+                        Log.d("MangaOcr", "--- 识别成功 ---")
+                        Log.d("MangaOcr", "原文内容: $text")
+                    } else {
+                        Log.e("MangaOcr", "响应体为空")
+                    }
+
+                    // 如果需要在主线程处理结果（如弹窗），请解开下面注释
+                    /*
+                    Handler(Looper.getMainLooper()).post {
+                        // 在这里更新 UI
+                    }
+                    */
+                }
+            }
+        })
     }
 
     private fun bitmapToBase64(bitmap: Bitmap): String {

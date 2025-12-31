@@ -59,11 +59,11 @@ class MainActivity : AppCompatActivity() {
     private var isAutoProtocolFallback = false
     // 标记位：用于区分长按是否已被处理 (Flag to track if long press was handled)
     private var isLongPressHandled = false
-    
+
     // 核心修改：OCR 模式开关标记 (OCR mode toggle flag)
     private var isOcrEnabled = false
 
-    private lateinit var ocrManager: MangaOcrManager
+    private var ocrManager: MangaOcrManager? = null
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -407,9 +407,7 @@ class MainActivity : AppCompatActivity() {
                         Log.d("MangaOcr", "检测到点按: ($x, $y)，启动切图...")
 
                         // 调用 Manager 进行切图测试
-                        ocrManager.processCrop(x, y) { base64 ->
-                            Log.d("MangaOcr", "切图 Base64 已生成，长度: ${base64.length}")
-                        }
+                        ocrManager?.processCrop(x, y)
                     }
                 }
             }
