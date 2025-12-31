@@ -25,7 +25,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="更多设置"
+                android:text="操作设置"
                 android:textSize="20sp"
                 android:textColor="#3581b2"
                 android:textStyle="bold"
@@ -36,11 +36,36 @@
                 android:id="@+id/checkVolumePaging"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="按键翻页时刷新（for E-Ink）"
+                android:text="按键翻页时闪白刷新（for E-Ink）"
                 android:textSize="15sp"
                 android:checked="true"
                 android:padding="8dp"
                 tools:ignore="HardcodedText" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="OCR日文识别"
+                android:textSize="20sp"
+                android:textColor="#3581b2"
+                android:textStyle="bold"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="8dp"
+                tools:ignore="HardcodedText" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="服务器地址（部署方法详见GitHub页面）"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/editOcrUrl"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textUri"
+                    android:textSize="14sp" />
+            </com.google.android.material.textfield.TextInputLayout>
             
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>

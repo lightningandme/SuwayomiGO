@@ -4,6 +4,7 @@ package com.suwayomi.go
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.app.DownloadManager
+import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -59,11 +60,11 @@ class MainActivity : AppCompatActivity() {
     private var isAutoProtocolFallback = false
     // 标记位：用于区分长按是否已被处理 (Flag to track if long press was handled)
     private var isLongPressHandled = false
-
+    
     // 核心修改：OCR 模式开关标记 (OCR mode toggle flag)
     private var isOcrEnabled = false
 
-    private var ocrManager: MangaOcrManager? = null
+    private lateinit var ocrManager: MangaOcrManager
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -303,7 +304,8 @@ class MainActivity : AppCompatActivity() {
                 val isChapterPage = url?.contains("chapter") == true
                 swipeRefresh.isEnabled = webView.scrollY == 0 && !isChapterPage
 
-                // 关键修复：在历史记录变更（包括单页应用路由跳转）时，如果离开章节页面，则重置 OCR 状态
+                // 核心逻辑：退出章节页面时自动关闭 OCR 监听状态 (适用于单页应用路由跳转)
+                // (Automatically disable OCR mode when leaving chapter - for SPA navigation)
                 if (!isChapterPage) {
                     isOcrEnabled = false
                 }
@@ -399,7 +401,7 @@ class MainActivity : AppCompatActivity() {
                     val deltaX = abs(event.x - lastDownX)
                     val deltaY = abs(event.y - lastDownY)
 
-                    // 核心修改：只有在 OCR 模式开启且是“点按”时才触发逻辑 (Trigger only if OCR mode is enabled and it's a click)
+                    // 核心逻辑：只有在 OCR 模式开启且是“点按”时才触发逻辑 (Trigger only if OCR mode is enabled and it's a click)
                     if (isOcrEnabled && deltaX < clickTHRESHOLD && deltaY < clickTHRESHOLD) {
                         val x = event.x.toInt()
                         val y = event.y.toInt()
@@ -407,7 +409,7 @@ class MainActivity : AppCompatActivity() {
                         Log.d("MangaOcr", "检测到点按: ($x, $y)，启动切图...")
 
                         // 调用 Manager 进行切图测试
-                        ocrManager?.processCrop(x, y)
+                        ocrManager.processCrop(x, y)
                     }
                 }
             }
@@ -417,7 +419,7 @@ class MainActivity : AppCompatActivity() {
             // 这样用户在 OCR 模式下无法通过滑动或点击进行翻页。
             // 否则返回 false，让 WebView 正常处理交互。
             if (isOcrEnabled && isChapterPage) {
-                true
+                true 
             } else {
                 false
             }
@@ -644,15 +646,18 @@ class MainActivity : AppCompatActivity() {
     private fun showMoreSettingsDialog() {
         val view = LayoutInflater.from(this).inflate(R.layout.more_settings, null)
         val checkVolumePaging = view.findViewById<SwitchCompat>(R.id.checkVolumePaging)
+        val editOcrUrl = view.findViewById<EditText>(R.id.editOcrUrl) // 新增 OCR 地址填写框 (Add OCR URL edit field)
         
-        // 加载当前保存的状态 (Load saved state)
+        // 加载当前保存的状态 (Load saved states)
         checkVolumePaging.isChecked = prefs.getBoolean("volume_paging", true)
+        editOcrUrl.setText(prefs.getString("ocr_server_url", "http://192.168.137.1:12233/ocr"))
 
         val dialog = AlertDialog.Builder(this)
             .setView(view)
             .setPositiveButton("确定") { _, _ ->
                 prefs.edit {
                     putBoolean("volume_paging", checkVolumePaging.isChecked)
+                    putString("ocr_server_url", editOcrUrl.text.toString().trim()) // 保存 OCR 地址 (Save OCR URL)
                 }
             }
             .setNegativeButton("取消", null)

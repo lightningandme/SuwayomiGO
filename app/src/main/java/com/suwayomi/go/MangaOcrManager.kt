@@ -69,12 +69,13 @@ data class OcrResponse(
         }
     }
 }
+
 class MangaOcrManager(private val webView: WebView) {
 
     // 定义切图大小
     private val cropSize = 400
     private val client = OkHttpClient() // 单例客户端
-    private val serverUrl = "http://192.168.137.1:12233/ocr" // 替换为你的真实IP
+
     /**
      * 执行局部切图的核心函数
      * @param clickX 点击的 X 坐标
@@ -104,55 +105,72 @@ class MangaOcrManager(private val webView: WebView) {
     }
 
     private fun sendToOcrServer(base64Image: String) {
+        // 从 SharedPreferences 获取最新的 OCR 服务器地址 (Fetch the latest OCR server URL)
+        val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+        val serverUrl = prefs.getString("ocr_server_url", "http://192.168.137.1:12233/ocr") ?: ""
+
+        if (serverUrl.isEmpty()) {
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(webView.context, "请先在“更多设置”中配置 OCR 服务器地址", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+
         // 构建请求体 JSON
         val json = JSONObject().apply {
             put("image", base64Image)
         }.toString()
 
         val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
-        val request = Request.Builder().url(serverUrl).post(body).build()
+        
+        try {
+            val request = Request.Builder().url(serverUrl).post(body).build()
 
-        Log.d("MangaOcr", "正在发送请求到: $serverUrl")
+            Log.d("MangaOcr", "正在发送请求到: $serverUrl")
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onResponse(call: Call, response: Response) {
-                // .use 会自动关闭 response，防止内存泄漏
-                response.use {
-                    if (!response.isSuccessful) {
-                        Log.e("MangaOcr", "服务器返回错误: ${response.code}")
-                        return
-                    }
-
-                    // 1. 获取后端返回的 JSON 字符串
-                    val bodyString = response.body?.string() ?: ""
-
-                    if (bodyString.isEmpty()) {
-                        Log.e("MangaOcr", "服务器返回内容为空")
-                        return
-                    }
-
-                    try {
-                        // 2. 解析 JSON 到 OcrResponse 对象
-                        val ocrResult = OcrResponse.fromJson(bodyString)
-
-                        Log.d("MangaOcrResult", "成功识别: ${ocrResult.text}")
-
-                        // 3. 切换回主线程 (UI Thread) 来显示 BottomSheet
-                        Handler(Looper.getMainLooper()).post {
-                            showResultBottomSheet(ocrResult)
+            client.newCall(request).enqueue(object : Callback {
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        if (!response.isSuccessful) {
+                            Log.e("MangaOcr", "服务器返回错误: ${response.code}")
+                            Handler(Looper.getMainLooper()).post {
+                                Toast.makeText(webView.context, "OCR 服务器响应错误: ${response.code}", Toast.LENGTH_SHORT).show()
+                            }
+                            return
                         }
 
-                    } catch (e: Exception) {
-                        Log.e("MangaOcr", "JSON 解析失败: ${e.message}")
-                        e.printStackTrace()
+                        val bodyString = response.body?.string() ?: ""
+                        if (bodyString.isEmpty()) {
+                            Log.e("MangaOcr", "服务器返回内容为空")
+                            return
+                        }
+
+                        try {
+                            val ocrResult = OcrResponse.fromJson(bodyString)
+                            Log.d("MangaOcrResult", "成功识别: ${ocrResult.text}")
+
+                            Handler(Looper.getMainLooper()).post {
+                                showResultBottomSheet(ocrResult)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("MangaOcr", "JSON 解析失败: ${e.message}")
+                        }
                     }
                 }
-            }
 
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e("MangaOcr", "网络请求失败: ${e.message}")
+                override fun onFailure(call: Call, e: IOException) {
+                    Log.e("MangaOcr", "网络请求失败: ${e.message}")
+                    Handler(Looper.getMainLooper()).post {
+                        Toast.makeText(webView.context, "无法连接到 OCR 服务器，请检查地址", Toast.LENGTH_LONG).show()
+                    }
+                }
+            })
+        } catch (e: Exception) {
+            Log.e("MangaOcr", "URL 格式错误: ${e.message}")
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(webView.context, "OCR 地址格式错误", Toast.LENGTH_SHORT).show()
             }
-        })
+        }
     }
 
     private fun bitmapToBase64(bitmap: Bitmap): String {
@@ -164,38 +182,31 @@ class MangaOcrManager(private val webView: WebView) {
 
     fun saveBitmapToDownload(context: Context, bitmap: Bitmap, fileName: String) {
         val relativePath = Environment.DIRECTORY_PICTURES + "/MangaCrop"
-
         val contentValues = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, "$fileName.jpg")
             put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
-                put(MediaStore.MediaColumns.IS_PENDING, 1) // 锁定文件，写入中
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
         }
 
         val resolver = context.contentResolver
-        // 使用 Images.Media 兼容 API 24
         val contentUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-
         var uri: Uri? = null
 
         try {
             uri = resolver.insert(contentUri, contentValues)
-
             uri?.let {
                 val outputStream: OutputStream? = resolver.openOutputStream(it)
                 outputStream?.use { stream ->
-                    // 写入图片数据
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
                 }
-
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     contentValues.clear()
-                    contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0) // 解锁文件
+                    contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
                     resolver.update(it, contentValues, null, null)
                 }
-                Log.d("MangaOcr", "图片已保存: $fileName.jpg")
             }
         } catch (e: Exception) {
             Log.e("MangaOcr", "保存失败: ${e.message}")
@@ -204,7 +215,6 @@ class MangaOcrManager(private val webView: WebView) {
     }
 
     private fun showResultBottomSheet(result: OcrResponse) {
-        // 切换到主线程操作 UI
         Handler(Looper.getMainLooper()).post {
             val context = webView.context
             val dialog = BottomSheetDialog(context)
@@ -216,23 +226,17 @@ class MangaOcrManager(private val webView: WebView) {
 
             tvFullOcr.text = result.text
 
-// 动态添加单词卡片
             result.words.forEach { word ->
                 val wordView = TextView(context).apply {
-                    // 表面形 (换行) 原型
                     text = "${word.surface}\n[${word.baseForm}]"
-
-                    // 修复 sp 报错：直接赋值 12f，系统默认单位就是 SP
                     textSize = 12f
-
                     setTextColor(android.graphics.Color.BLACK)
                     setPadding(30, 15, 30, 15)
 
-                    // 给卡片加一个简单的背景边框
                     val shape = android.graphics.drawable.GradientDrawable().apply {
-                        setColor("#F5F5F5".toColorInt()) // 浅灰色背景
-                        cornerRadius = 8f // 圆角
-                        setStroke(2, "#CCCCCC".toColorInt()) // 灰色边框
+                        setColor("#F5F5F5".toColorInt())
+                        cornerRadius = 8f
+                        setStroke(2, "#CCCCCC".toColorInt())
                     }
                     background = shape
 
@@ -245,7 +249,7 @@ class MangaOcrManager(private val webView: WebView) {
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    setMargins(0, 0, 20, 0) // 单词之间的间距
+                    setMargins(0, 0, 20, 0)
                 }
                 containerWords.addView(wordView, params)
             }
