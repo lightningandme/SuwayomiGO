@@ -7,11 +7,19 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
+import android.view.LayoutInflater
 import android.webkit.WebView
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
 import androidx.core.graphics.createBitmap
+import androidx.core.graphics.toColorInt
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -23,17 +31,6 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.OutputStream
-import com.google.android.material.bottomsheet.BottomSheetDialog
-import android.view.LayoutInflater
-import android.widget.TextView
-import android.widget.LinearLayout
-import android.widget.Button
-import android.widget.Toast
-import android.content.ClipboardManager
-import android.os.Handler
-import android.os.Looper
-import android.view.View
-import androidx.core.graphics.toColorInt
 
 /**
  * 专门处理漫画 OCR 逻辑的管理类
@@ -222,28 +219,14 @@ class MangaOcrManager(private val webView: WebView) {
             val dialog = BottomSheetDialog(context)
             val view = LayoutInflater.from(context).inflate(R.layout.layout_ocr_result, null)
 
-            // 1. 绑定控件
-            val tvTranslation = view.findViewById<TextView>(R.id.text_translation) // 需在 XML 增加
+            val tvTranslation = view.findViewById<TextView>(R.id.text_translation)
             val tvFullOcr = view.findViewById<TextView>(R.id.text_full_ocr)
             val containerWords = view.findViewById<LinearLayout>(R.id.container_words)
-            val btnCopy = view.findViewById<Button>(R.id.btn_copy)
 
-            tvTranslation.text = result.translation.ifEmpty { "翻译生成中..." }
+            // 1. 立即显示本地已有的数据 (OCR 和 分词)
             tvFullOcr.text = result.text
-
-            // 2. 视觉优先级：先看翻译，再看原文
-            tvTranslation.apply {
-                text = result.translation
-                visibility = if (result.translation.isNotEmpty()) View.VISIBLE else View.GONE
-                // 这里可以动态设置加粗
-                typeface = android.graphics.Typeface.DEFAULT_BOLD
-            }
-
-            tvFullOcr.apply {
-                text = result.text
-                alpha = 0.7f // 原文稍淡一点，突出翻译
-                textSize = 14f
-            }
+            tvTranslation.text = "AI 正在思考..." // 预设文案
+            tvTranslation.alpha = 0.5f
 
             // 3. 动态渲染单词卡片（带词性上色）
             result.words.forEach { word ->
@@ -275,9 +258,9 @@ class MangaOcrManager(private val webView: WebView) {
                     }
 
                     background = android.graphics.drawable.GradientDrawable().apply {
-                        setColor(android.graphics.Color.parseColor(bgColor))
+                        setColor(bgColor.toColorInt())
                         cornerRadius = 12f
-                        setStroke(2, android.graphics.Color.parseColor(strokeColor))
+                        setStroke(2, strokeColor.toColorInt())
                     }
 
                     setOnClickListener {
@@ -296,17 +279,44 @@ class MangaOcrManager(private val webView: WebView) {
                 containerWords.addView(wordView, params)
             }
 
-            // 4. 功能按钮
-            btnCopy.setOnClickListener {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = android.content.ClipData.newPlainText("Manga Text", result.text)
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(context, "原文已复制", Toast.LENGTH_SHORT).show()
-                dialog.dismiss() // 复制完自动关闭，加快操作流
-            }
 
             dialog.setContentView(view)
             dialog.show()
+            // 2. 核心：发起异步翻译请求
+            fetchTranslationAsync(tvTranslation)
         }
+    }
+
+    private fun fetchTranslationAsync(textView: TextView) {
+        // 这里使用你已有的网络库（比如 OkHttp 或简单的 Thread）
+        // 从 SharedPreferences 获取最新的 OCR 服务器地址 (Fetch the latest OCR server URL)
+        val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+        val serverUrl = prefs.getString("ocr_server_url", "http://192.168.137.1:12233/ocr") ?: ""
+        val translationUrl = serverUrl.replace("/ocr", "/get_translation")
+        Thread {
+            try {
+                // 请求后端的 /get_translation 接口
+                val client = OkHttpClient()
+                val request = Request.Builder()
+                    .url(translationUrl)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val json = JSONObject(response.body?.string() ?: "")
+                val translation = json.optString("translation")
+
+                // 回到主线程更新 UI
+                Handler(Looper.getMainLooper()).post {
+                    textView.text = translation
+                    textView.alpha = 1.0f // 恢复亮度
+                    // 可以加个简单的淡入动画
+                    textView.animate().alpha(1f).setDuration(300).start()
+                }
+            } catch (e: Exception) {
+                Handler(Looper.getMainLooper()).post {
+                    textView.text = "翻译加载失败"
+                }
+            }
+        }.start()
     }
 }
