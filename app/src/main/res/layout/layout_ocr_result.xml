@@ -14,13 +14,30 @@
         android:background="#DDDDDD" />
 
     <TextView
+        android:id="@+id/text_translation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="正在翻译..."
+        android:textColor="#1A1A1A"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:lineSpacingExtra="4dp" />
+
+    <TextView
         android:id="@+id/text_full_ocr"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="识别结果加载中..."
-        android:textColor="#333333"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        android:layout_marginTop="8dp"
+        android:text="识别内容"
+        android:textColor="#666666"
+        android:textSize="15sp"
+        android:lineSpacingExtra="2dp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="16dp"
+        android:background="#EEEEEE" />
 
     <HorizontalScrollView
         android:layout_width="match_parent"
@@ -32,14 +49,23 @@
             android:id="@+id/container_words"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:paddingBottom="4dp"
             android:orientation="horizontal" />
     </HorizontalScrollView>
 
-    <Button
-        android:id="@+id/btn_copy"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:text="复制全文"
-        style="@style/Widget.AppCompat.Button.Borderless.Colored" />
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_copy"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="复制原文"
+            style="@style/Widget.AppCompat.Button.Borderless.Colored" />
+
+    </LinearLayout>
 </LinearLayout>
