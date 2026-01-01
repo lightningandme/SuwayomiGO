@@ -225,11 +225,28 @@ class MangaOcrManager(private val webView: WebView) {
         Handler(Looper.getMainLooper()).post {
             val context = webView.context
             val dialog = BottomSheetDialog(context)
+
+            // --- 墨水屏优化 (E-ink Optimization) ---
+            dialog.window?.let { window ->
+                // 1. 禁用背景变暗：保持背景画面不变 (Disable dimming to keep background clear)
+                window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                // 2. 禁用弹出动画：减少墨水屏残影 (Disable window animations to reduce ghosting)
+                window.setWindowAnimations(0)
+            }
+
             val view = LayoutInflater.from(context).inflate(R.layout.layout_ocr_result, null)
 
             val tvTranslation = view.findViewById<TextView>(R.id.text_translation)
             val tvFullOcr = view.findViewById<TextView>(R.id.text_full_ocr)
             val containerWords = view.findViewById<LinearLayout>(R.id.container_words)
+
+            // 实现复制按钮逻辑 (Implement copy button logic)
+            view.findViewById<android.view.View>(R.id.btn_copy)?.setOnClickListener {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("OCR Text", result.text)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+            }
 
             // 1. 立即显示本地已有的数据 (OCR 和 分词)
             tvFullOcr.text = result.text
@@ -272,7 +289,7 @@ class MangaOcrManager(private val webView: WebView) {
                     }
 
                     setOnClickListener {
-                        // 点击显示读音和详细词性
+                        // 点击显示读音 and 详细词性
                         val detail = "【${word.reading}】\n类型: ${word.pos}"
                         Toast.makeText(context, detail, Toast.LENGTH_SHORT).show()
                     }
@@ -317,8 +334,7 @@ class MangaOcrManager(private val webView: WebView) {
                 Handler(Looper.getMainLooper()).post {
                     textView.text = translation
                     textView.alpha = 1.0f // 恢复亮度
-                    // 可以加个简单的淡入动画
-                    textView.animate().alpha(1f).setDuration(300).start()
+                    // 墨水屏优化：移除淡入动画，直接刷新文字 (Remove fade-in animation for E-ink)
                 }
             } catch (e: Exception) {
                 Handler(Looper.getMainLooper()).post {
