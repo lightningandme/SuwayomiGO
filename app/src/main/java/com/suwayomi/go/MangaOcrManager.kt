@@ -100,7 +100,7 @@ class MangaOcrManager(private val webView: WebView) {
         val cropped = Bitmap.createBitmap(fullBitmap, left, top, actualWidth, actualHeight)
 
         // 调试用：保存到本地
-        saveBitmapToDownload(webView.context, cropped, "crop_${System.currentTimeMillis()}")
+        //saveBitmapToDownload(webView.context, cropped, "crop_${System.currentTimeMillis()}")
 
         // 转码并发送
         val base64String = bitmapToBase64(cropped)
