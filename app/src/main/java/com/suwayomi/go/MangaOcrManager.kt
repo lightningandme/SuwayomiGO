@@ -72,7 +72,7 @@ data class OcrResponse(
 class MangaOcrManager(private val webView: WebView) {
 
     // 定义切图大小
-    private val cropSize = 400
+    private val cropSize = 600
     private val client = OkHttpClient() // 单例客户端
 
     /**
@@ -93,17 +93,23 @@ class MangaOcrManager(private val webView: WebView) {
         val left = (clickX - half).coerceIn(0, (webView.width - actualWidth).coerceAtLeast(0))
         val top = (clickY - half).coerceIn(0, (webView.height - actualHeight).coerceAtLeast(0))
 
+        // 核心计算：点击点在小图里的相对位置
+        val relX = clickX - left
+        val relY = clickY - top
+
         val cropped = Bitmap.createBitmap(fullBitmap, left, top, actualWidth, actualHeight)
 
-        // 1. 调试用：保存到本地
+        // 调试用：保存到本地
         saveBitmapToDownload(webView.context, cropped, "crop_${System.currentTimeMillis()}")
 
-        // 2. 转码并发送
+        // 转码并发送
         val base64String = bitmapToBase64(cropped)
-        sendToOcrServer(base64String)
+        // 修改这里的调用，传入相对坐标
+        sendToOcrServer(base64String, relX, relY)
     }
 
-    private fun sendToOcrServer(base64Image: String) {
+    // 1. 修改参数列表，接收 x 和 y
+    private fun sendToOcrServer(base64Image: String, relX: Int, relY: Int) {
         // 从 SharedPreferences 获取最新的 OCR 服务器地址 (Fetch the latest OCR server URL)
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
         val serverUrl = prefs.getString("ocr_server_url", "http://192.168.137.1:12233/ocr") ?: ""
@@ -115,9 +121,11 @@ class MangaOcrManager(private val webView: WebView) {
             return
         }
 
-        // 构建请求体 JSON
+        // 2. 在 JSON 中加入坐标
         val json = JSONObject().apply {
             put("image", base64Image)
+            put("x", relX) // 传入相对坐标 X
+            put("y", relY) // 传入相对坐标 Y
         }.toString()
 
         val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -125,7 +133,7 @@ class MangaOcrManager(private val webView: WebView) {
         try {
             val request = Request.Builder().url(serverUrl).post(body).build()
 
-            Log.d("MangaOcr", "正在发送请求到: $serverUrl")
+            Log.d("MangaOcr", "正在发送请求 (含坐标 $relX, $relY) 到: $serverUrl")
 
             client.newCall(request).enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
