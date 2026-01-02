@@ -3,36 +3,46 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
     android:background="@android:color/transparent"
-    android:fillViewport="true"
     android:overScrollMode="never"
     android:scrollbars="none">
 
-    <!-- 使用 MaterialCardView 实现圆角和浮动感 (Use MaterialCardView for rounded corners and floating feel) -->
+    <!-- 限制卡片的最大宽度为 600dp (Limit the maximum width of the card to 600dp) -->
     <com.google.android.material.card.MaterialCardView
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="12dp"
         app:cardBackgroundColor="@android:color/white"
         app:cardCornerRadius="16dp"
         app:cardElevation="6dp"
-        app:strokeWidth="0dp">
+        app:strokeWidth="0dp"
+        app:layout_constrainedWidth="true"
+        app:layout_constraintWidth_max="600dp">
 
         <LinearLayout
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:minWidth="280dp"
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- 顶部指示条：暗示该区域可交互 (Top indicator bar) -->
-            <View
-                android:layout_width="32dp"
-                android:layout_height="3dp"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginBottom="12dp"
-                android:background="#E0E0E0" />
+            <!-- 增加感应面积的拖动句柄 (Drag handle with enlarged touch area) -->
+            <FrameLayout
+                android:id="@+id/drag_handle_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="4dp"
+                android:paddingBottom="12dp">
+                
+                <View
+                    android:id="@+id/drag_handle"
+                    android:layout_width="32dp"
+                    android:layout_height="4dp"
+                    android:layout_gravity="center_horizontal"
+                    android:background="#E0E0E0" />
+            </FrameLayout>
 
             <TextView
                 android:id="@+id/text_translation"

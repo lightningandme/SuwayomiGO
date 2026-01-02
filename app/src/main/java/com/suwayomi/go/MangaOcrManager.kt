@@ -1,18 +1,15 @@
 package com.suwayomi.go
 
-import android.content.ContentValues
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.net.Uri
-import android.os.Build
-import android.os.Environment
 import android.os.Handler
 import android.os.Looper
-import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -32,7 +29,6 @@ import okhttp3.Response
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.io.OutputStream
 
 /**
  * 专门处理漫画 OCR 逻辑的管理类 (Management class for Manga OCR logic)
@@ -101,9 +97,9 @@ class MangaOcrManager(private val webView: WebView) {
         val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
         val ocrUrl = "${serverUrl}/ocr"
 
-        if (ocrUrl.isEmpty() || serverUrl.isEmpty()) {
+        if (ocrUrl.isEmpty()) {
             Handler(Looper.getMainLooper()).post {
-                Toast.makeText(webView.context, "请先在“更多设置”中配置 OCR 服务器地址", Toast.LENGTH_LONG).show()
+                Toast.makeText(webView.context, "请先配置 OCR 地址", Toast.LENGTH_LONG).show()
             }
             return
         }
@@ -128,12 +124,18 @@ class MangaOcrManager(private val webView: WebView) {
                             Handler(Looper.getMainLooper()).post {
                                 showResultBottomSheet(ocrResult, absClickY)
                             }
-                        } catch (e: Exception) {}
+                        } catch (e: Exception) {
+                            Log.e("MangaOcr", "Parse failed")
+                        }
                     }
                 }
-                override fun onFailure(call: Call, e: IOException) {}
+                override fun onFailure(call: Call, e: IOException) {
+                    Log.e("MangaOcr", "Network error")
+                }
             })
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            Log.e("MangaOcr", "Request error")
+        }
     }
 
     private fun bitmapToBase64(bitmap: Bitmap): String {
@@ -142,6 +144,7 @@ class MangaOcrManager(private val webView: WebView) {
         return Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun showResultBottomSheet(result: OcrResponse, absClickY: Int) {
         Handler(Looper.getMainLooper()).post {
             val context = webView.context
@@ -152,6 +155,7 @@ class MangaOcrManager(private val webView: WebView) {
             val tvTranslation = view.findViewById<TextView>(R.id.text_translation)
             val tvFullOcr = view.findViewById<TextView>(R.id.text_full_ocr)
             val containerWords = view.findViewById<LinearLayout>(R.id.container_words)
+            val dragHandleContainer = view.findViewById<View>(R.id.drag_handle_container)
 
             view.findViewById<View>(R.id.btn_copy)?.setOnClickListener {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -188,14 +192,12 @@ class MangaOcrManager(private val webView: WebView) {
                 })
             }
 
-            // --- 核心修复：预先测量布局高度 (Pre-measure height to avoid jump) ---
             val displayMetrics = context.resources.displayMetrics
             val screenHeight = displayMetrics.heightPixels
             val screenWidth = displayMetrics.widthPixels
             
-            // 模拟测量布局 (Measure the view before showing)
             view.measure(
-                View.MeasureSpec.makeMeasureSpec(screenWidth, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(screenWidth, View.MeasureSpec.AT_MOST),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
             )
             val actualDialogHeight = view.measuredHeight
@@ -203,41 +205,59 @@ class MangaOcrManager(private val webView: WebView) {
             dialog.setContentView(view)
 
             dialog.window?.let { window ->
-                // 1. 禁用背景变暗 (No dim behind)
                 window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                // 2. 彻底禁用系统动画 (Crucial: Completely disable window animations)
                 window.setWindowAnimations(0) 
                 window.attributes.windowAnimations = 0
-                
                 window.setBackgroundDrawableResource(android.R.color.transparent)
                 window.decorView.setPadding(0, 0, 0, 0)
 
                 val params = window.attributes
-                params.width = WindowManager.LayoutParams.MATCH_PARENT
+                // 强制设为自适应宽高，方便自由拖动 (Set to wrap_content for free dragging)
+                params.width = WindowManager.LayoutParams.WRAP_CONTENT
                 params.height = WindowManager.LayoutParams.WRAP_CONTENT
                 params.gravity = android.view.Gravity.TOP or android.view.Gravity.START
 
-                val safeZone = 50 // 避开中心 100px 范围
+                val safeZone = screenWidth.coerceAtMost(screenHeight) / 4
 
-                // 精准像素级定位逻辑 (Pixel-perfect positioning)
+                // 初始定位 (Initial Positioning)
                 if (absClickY - safeZone - actualDialogHeight > 0) {
                     params.y = absClickY - safeZone - actualDialogHeight
                 } else if (absClickY + safeZone + actualDialogHeight < screenHeight) {
                     params.y = absClickY + safeZone
                 } else {
-                    // 如果放不下，则通过固定高度和 ScrollView 适配 (Fallback for long content)
-                    if (absClickY > screenHeight / 2) {
-                        params.y = 0
-                        params.height = absClickY - safeZone
-                    } else {
-                        params.y = absClickY + safeZone
-                        params.height = screenHeight - (absClickY + safeZone)
+                    params.y = if (absClickY > screenHeight / 2) 0 else screenHeight - actualDialogHeight
+                }
+                // 水平居中 (Center horizontally initially)
+                params.x = (screenWidth - view.measuredWidth) / 2
+                window.attributes = params
+
+                // --- 强化版手动拖动逻辑 (Enhanced Manual Dragging) ---
+                var initialX = 0
+                var initialY = 0
+                var initialTouchX = 0f
+                var initialTouchY = 0f
+
+                dragHandleContainer.setOnTouchListener { v, event ->
+                    when (event.action) {
+                        MotionEvent.ACTION_DOWN -> {
+                            initialX = params.x
+                            initialY = params.y
+                            initialTouchX = event.rawX
+                            initialTouchY = event.rawY
+                            v.performClick()
+                            true
+                        }
+                        MotionEvent.ACTION_MOVE -> {
+                            params.x = initialX + (event.rawX - initialTouchX).toInt()
+                            params.y = initialY + (event.rawY - initialTouchY).toInt()
+                            window.attributes = params // 实时更新 (Real-time update)
+                            true
+                        }
+                        else -> false
                     }
                 }
-                window.attributes = params
             }
 
-            // 直接显示，此时位置已定，且动画已禁 (Show now with fixed position and no anim)
             dialog.show()
             fetchTranslationAsync(tvTranslation)
         }
@@ -252,7 +272,8 @@ class MangaOcrManager(private val webView: WebView) {
                 val client = OkHttpClient()
                 val request = Request.Builder().url(translationUrl).build()
                 val response = client.newCall(request).execute()
-                val json = JSONObject(response.body?.string() ?: "")
+                val body = response.body?.string() ?: ""
+                val json = JSONObject(body)
                 val translation = json.optString("translation")
                 Handler(Looper.getMainLooper()).post {
                     textView.text = translation
