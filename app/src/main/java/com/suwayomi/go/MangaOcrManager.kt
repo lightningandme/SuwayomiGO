@@ -96,6 +96,12 @@ class MangaOcrManager(private val webView: WebView) {
     }
 
     private fun sendToOcrServer(base64Image: String, relX: Int, relY: Int, absClickY: Int) {
+        // 读取 WebView 的 Title 并提取漫画名称 (Read WebView title and extract manga name)
+        // 取 ": Chapter" 之前的所有字符 (Get all characters before ": Chapter")
+        val fullTitle = webView.title ?: ""
+        val mangaName = fullTitle.substringBefore(": Chapter")
+        Log.e("MangaOcr", mangaName)
+
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
         val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
         val ocrUrl = "${serverUrl}/ocr"
@@ -111,6 +117,7 @@ class MangaOcrManager(private val webView: WebView) {
             put("image", base64Image)
             put("x", relX)
             put("y", relY)
+            put("mangaName", mangaName) // 将提取的漫画名称加入请求字段 (Add extracted manga name to request)
         }.toString()
 
         val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -195,6 +202,7 @@ class MangaOcrManager(private val webView: WebView) {
                 })
             }
 
+            // --- 核心逻辑：预先测量并禁用动画 (Core logic: pre-measure and disable animation) ---
             val displayMetrics = context.resources.displayMetrics
             val screenHeight = displayMetrics.heightPixels
             val screenWidth = displayMetrics.widthPixels
@@ -220,7 +228,7 @@ class MangaOcrManager(private val webView: WebView) {
                 params.height = WindowManager.LayoutParams.WRAP_CONTENT
                 params.gravity = android.view.Gravity.TOP or android.view.Gravity.START
 
-                val safeZone = screenWidth.coerceAtMost(screenHeight) / 4
+                val safeZone = screenWidth.coerceAtMost(screenHeight) / 5
 
                 // 初始定位 (Initial Positioning)
                 if (absClickY - safeZone - actualDialogHeight > 0) {
@@ -228,13 +236,17 @@ class MangaOcrManager(private val webView: WebView) {
                 } else if (absClickY + safeZone + actualDialogHeight < screenHeight) {
                     params.y = absClickY + safeZone
                 } else {
-                    params.y = if (absClickY > screenHeight / 2) 0 else screenHeight - actualDialogHeight
+                    if (absClickY > screenHeight / 2) {
+                        params.y = 0
+                        params.height = absClickY - safeZone
+                    } else {
+                        params.y = absClickY + safeZone
+                        params.height = screenHeight - (absClickY + safeZone)
+                    }
                 }
-                // 水平居中 (Center horizontally initially)
-                params.x = (screenWidth - view.measuredWidth) / 2
                 window.attributes = params
 
-                // --- 强化版手动拖动逻辑 (Enhanced Manual Dragging) ---
+                // --- 实现手动拖动功能 (Implement manual dragging) ---
                 var initialX = 0
                 var initialY = 0
                 var initialTouchX = 0f
