@@ -112,9 +112,12 @@ class MangaOcrManager(private val webView: WebView) {
     private fun sendToOcrServer(base64Image: String, relX: Int, relY: Int) {
         // 从 SharedPreferences 获取最新的 OCR 服务器地址 (Fetch the latest OCR server URL)
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
-        val serverUrl = prefs.getString("ocr_server_url", "http://192.168.137.1:12233/ocr") ?: ""
+        // 默认值设为空字符串 (Default value set to empty string)
+        val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
+        // 直接在 serverUrl 后拼接 /ocr (Append /ocr to serverUrl)
+        val ocrUrl = "${serverUrl}/ocr"
 
-        if (serverUrl.isEmpty()) {
+        if (ocrUrl.isEmpty()) {
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(webView.context, "请先在“更多设置”中配置 OCR 服务器地址", Toast.LENGTH_LONG).show()
             }
@@ -131,9 +134,9 @@ class MangaOcrManager(private val webView: WebView) {
         val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
         
         try {
-            val request = Request.Builder().url(serverUrl).post(body).build()
+            val request = Request.Builder().url(ocrUrl).post(body).build()
 
-            Log.d("MangaOcr", "正在发送请求 (含坐标 $relX, $relY) 到: $serverUrl")
+            Log.d("MangaOcr", "正在发送请求 (含坐标 $relX, $relY) 到: $ocrUrl")
 
             client.newCall(request).enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
@@ -316,8 +319,10 @@ class MangaOcrManager(private val webView: WebView) {
         // 这里使用你已有的网络库（比如 OkHttp 或简单的 Thread）
         // 从 SharedPreferences 获取最新的 OCR 服务器地址 (Fetch the latest OCR server URL)
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
-        val serverUrl = prefs.getString("ocr_server_url", "http://192.168.137.1:12233/ocr") ?: ""
-        val translationUrl = serverUrl.replace("/ocr", "/get_translation")
+        // 默认值设为空字符串 (Default value set to empty string)
+        val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
+        // 直接在 serverUrl 后拼接 /get_translation (Append /get_translation to serverUrl)
+        val translationUrl = "${serverUrl}/get_translation"
         Thread {
             try {
                 // 请求后端的 /get_translation 接口
