@@ -104,12 +104,12 @@ class MangaOcrManager(private val webView: WebView) {
 
         // 转码并发送
         val base64String = bitmapToBase64(cropped)
-        // 修改这里的调用，传入相对坐标
-        sendToOcrServer(base64String, relX, relY)
+        // 修改这里的调用，传入相对坐标和绝对点击 Y 轴坐标 (Pass relative coordinates and absolute Y click position)
+        sendToOcrServer(base64String, relX, relY, clickY)
     }
 
-    // 1. 修改参数列表，接收 x 和 y
-    private fun sendToOcrServer(base64Image: String, relX: Int, relY: Int) {
+    // 1. 修改参数列表，增加 absClickY 以便后续避开焦点 (Add absClickY to avoid blocking focus later)
+    private fun sendToOcrServer(base64Image: String, relX: Int, relY: Int, absClickY: Int) {
         // 从 SharedPreferences 获取最新的 OCR 服务器地址 (Fetch the latest OCR server URL)
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
         // 默认值设为空字符串 (Default value set to empty string)
@@ -160,7 +160,8 @@ class MangaOcrManager(private val webView: WebView) {
                             Log.d("MangaOcrResult", "成功识别: ${ocrResult.text}")
 
                             Handler(Looper.getMainLooper()).post {
-                                showResultBottomSheet(ocrResult)
+                                // 传递点击位置 (Pass click position)
+                                showResultBottomSheet(ocrResult, absClickY)
                             }
                         } catch (e: Exception) {
                             Log.e("MangaOcr", "JSON 解析失败: ${e.message}")
@@ -224,17 +225,23 @@ class MangaOcrManager(private val webView: WebView) {
         }
     }
 
-    private fun showResultBottomSheet(result: OcrResponse) {
+    private fun showResultBottomSheet(result: OcrResponse, absClickY: Int) {
         Handler(Looper.getMainLooper()).post {
             val context = webView.context
-            val dialog = BottomSheetDialog(context)
+            // 使用标准 Dialog 实现浮动模式 (Use standard Dialog for floating mode)
+            val dialog = android.app.Dialog(context)
+            dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
 
-            // --- 墨水屏优化 (E-ink Optimization) ---
+            // --- 墨水屏优化与精准悬浮 (E-ink Optimization & Precise Floating) ---
             dialog.window?.let { window ->
-                // 1. 禁用背景变暗：保持背景画面不变 (Disable dimming to keep background clear)
+                // 1. 禁用背景变暗 (Keep background clear)
                 window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                // 2. 禁用弹出动画：减少墨水屏残影 (Disable window animations to reduce ghosting)
+                // 2. 移除弹出动画 (No ghosting on E-ink)
                 window.setWindowAnimations(0)
+                // 3. 背景透明
+                window.setBackgroundDrawableResource(android.R.color.transparent)
+                // 4. 消除系统边距，确保宽度能真正铺满 (Clear default padding for true full width)
+                window.decorView.setPadding(0, 0, 0, 0)
             }
 
             val view = LayoutInflater.from(context).inflate(R.layout.layout_ocr_result, null)
@@ -243,7 +250,7 @@ class MangaOcrManager(private val webView: WebView) {
             val tvFullOcr = view.findViewById<TextView>(R.id.text_full_ocr)
             val containerWords = view.findViewById<LinearLayout>(R.id.container_words)
 
-            // 实现复制按钮逻辑 (Implement copy button logic)
+            // 实现复制按钮逻辑
             view.findViewById<android.view.View>(R.id.btn_copy)?.setOnClickListener {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 val clip = android.content.ClipData.newPlainText("OCR Text", result.text)
@@ -251,31 +258,26 @@ class MangaOcrManager(private val webView: WebView) {
                 Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
             }
 
-            // 1. 立即显示本地已有的数据 (OCR 和 分词)
             tvFullOcr.text = result.text
-            tvTranslation.text = "AI 正在思考..." // 预设文案
+            tvTranslation.text = "AI 正在思考..."
             tvTranslation.alpha = 0.5f
 
-            // 3. 动态渲染单词卡片（带词性上色）
             result.words.forEach { word ->
                 val wordView = TextView(context).apply {
-                    // 如果表面形和原型一致，就只显示一个，更清爽
                     text = if (word.surface == word.baseForm) {
                         "${word.surface}\n "
                     } else {
                         "${word.surface}\n[${word.baseForm}]"
                     }
-
                     textSize = 12f
                     setPadding(25, 12, 25, 12)
                     gravity = android.view.Gravity.CENTER
 
-                    // --- 词性上色逻辑 ---
                     val bgColor = when {
-                        word.pos.contains("名") -> "#E3F2FD" // 名词：淡蓝色
-                        word.pos.contains("动") -> "#E8F5E9" // 动词：淡绿色
-                        word.pos.contains("形容") -> "#FFF3E0" // 形容词：淡橙色
-                        word.pos.contains("助") -> "#F5F5F5" // 助词：浅灰色
+                        word.pos.contains("名") -> "#E3F2FD"
+                        word.pos.contains("动") -> "#E8F5E9"
+                        word.pos.contains("形容") -> "#FFF3E0"
+                        word.pos.contains("助") -> "#F5F5F5"
                         else -> "#FFFFFF"
                     }
 
@@ -292,7 +294,6 @@ class MangaOcrManager(private val webView: WebView) {
                     }
 
                     setOnClickListener {
-                        // 点击显示读音 and 详细词性
                         val detail = "【${word.reading}】\n类型: ${word.pos}"
                         Toast.makeText(context, detail, Toast.LENGTH_SHORT).show()
                     }
@@ -307,39 +308,49 @@ class MangaOcrManager(private val webView: WebView) {
                 containerWords.addView(wordView, params)
             }
 
-
             dialog.setContentView(view)
             dialog.show()
-            // 2. 核心：发起异步翻译请求
+
+            // 【核心修复】：在 show() 之后强制设置宽高。解决“很窄”的问题 (Fix "narrow" issue by setting layout after show())
+            dialog.window?.let { window ->
+                val displayMetrics = context.resources.displayMetrics
+                val screenHeight = displayMetrics.heightPixels
+                
+                // 强制应用全宽，并将高度锁定在屏幕的 30% (Force full width and ~30% height)
+                window.setLayout(
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    (screenHeight * 0.30).toInt()
+                )
+
+                // 重新设置位置 (Apply gravity again)
+                val params = window.attributes
+                if (absClickY > screenHeight * 0.5) {
+                    params.gravity = android.view.Gravity.TOP
+                } else {
+                    params.gravity = android.view.Gravity.BOTTOM
+                }
+                window.attributes = params
+            }
+
             fetchTranslationAsync(tvTranslation)
         }
     }
 
     private fun fetchTranslationAsync(textView: TextView) {
-        // 这里使用你已有的网络库（比如 OkHttp 或简单的 Thread）
-        // 从 SharedPreferences 获取最新的 OCR 服务器地址 (Fetch the latest OCR server URL)
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
-        // 默认值设为空字符串 (Default value set to empty string)
         val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
-        // 直接在 serverUrl 后拼接 /get_translation (Append /get_translation to serverUrl)
         val translationUrl = "${serverUrl}/get_translation"
         Thread {
             try {
-                // 请求后端的 /get_translation 接口
                 val client = OkHttpClient()
-                val request = Request.Builder()
-                    .url(translationUrl)
-                    .build()
-
+                val request = Request.Builder().url(translationUrl).build()
                 val response = client.newCall(request).execute()
                 val json = JSONObject(response.body?.string() ?: "")
                 val translation = json.optString("translation")
 
-                // 回到主线程更新 UI
                 Handler(Looper.getMainLooper()).post {
                     textView.text = translation
-                    textView.alpha = 1.0f // 恢复亮度
-                    // 墨水屏优化：移除淡入动画，直接刷新文字 (Remove fade-in animation for E-ink)
+                    textView.alpha = 1.0f
                 }
             } catch (e: Exception) {
                 Handler(Looper.getMainLooper()).post {

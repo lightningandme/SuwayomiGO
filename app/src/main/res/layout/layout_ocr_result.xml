@@ -1,75 +1,99 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- 使用 ScrollView 确保小窗模式下内容可滑动 (ScrollView ensures content is scrollable in small window mode) -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="20dp"
-    android:background="@android:color/white">
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent"
+    android:fillViewport="true"
+    android:overScrollMode="never"
+    android:scrollbars="none">
 
-    <View
-        android:layout_width="40dp"
-        android:layout_height="4dp"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="16dp"
-        android:background="#DDDDDD" />
-
-    <TextView
-        android:id="@+id/text_translation"
+    <!-- 使用 MaterialCardView 实现圆角和浮动感 (Use MaterialCardView for rounded corners and floating feel) -->
+    <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="正在翻译..."
-        android:textColor="#1A1A1A"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:lineSpacingExtra="4dp" />
-
-    <TextView
-        android:id="@+id/text_full_ocr"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="识别内容"
-        android:textColor="#666666"
-        android:textSize="15sp"
-        android:lineSpacingExtra="2dp" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:layout_marginTop="16dp"
-        android:background="#EEEEEE" />
-
-    <HorizontalScrollView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:scrollbars="none"
-        tools:ignore="SpeakableTextPresentCheck">
+        android:layout_margin="12dp"
+        app:cardBackgroundColor="@android:color/white"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="6dp"
+        app:strokeWidth="0dp">
 
         <LinearLayout
-            android:id="@+id/container_words"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingBottom="4dp" />
-    </HorizontalScrollView>
+            android:orientation="vertical"
+            android:padding="16dp">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:orientation="horizontal">
+            <!-- 顶部指示条：暗示该区域可交互 (Top indicator bar) -->
+            <View
+                android:layout_width="32dp"
+                android:layout_height="3dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="12dp"
+                android:background="#E0E0E0" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_copy"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="复制原文"
-            app:cornerRadius="8dp" />
+            <TextView
+                android:id="@+id/text_translation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="正在翻译..."
+                android:textColor="#1A1A1A"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                android:lineSpacingExtra="3dp" />
 
-    </LinearLayout>
-</LinearLayout>
+            <TextView
+                android:id="@+id/text_full_ocr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="识别内容"
+                android:textColor="#757575"
+                android:textSize="13sp"
+                android:lineSpacingExtra="2dp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="12dp"
+                android:background="#F0F0F0" />
+
+            <!-- 单词卡片区域 (Word cards area) -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:scrollbars="none"
+                tools:ignore="SpeakableTextPresentCheck">
+
+                <LinearLayout
+                    android:id="@+id/container_words"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingBottom="4dp" />
+            </HorizontalScrollView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_copy"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="复制原文"
+                    android:textSize="13sp"
+                    app:cornerRadius="8dp"
+                    app:strokeColor="#DDDDDD" />
+
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+</ScrollView>
