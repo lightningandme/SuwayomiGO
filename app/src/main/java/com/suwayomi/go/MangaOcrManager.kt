@@ -68,7 +68,10 @@ data class OcrResponse(
 
 class MangaOcrManager(private val webView: WebView) {
 
-    private val cropSize = 600
+    // 定义切图大小 (Crop size) - 按照设备分辨率的短边的 0.8 倍规定 (Set to 0.8 times the shorter side of the screen resolution)
+    private val cropSize = (webView.context.resources.displayMetrics.run {
+        widthPixels.coerceAtMost(heightPixels) * 0.8
+    }).toInt()
     private val client = OkHttpClient()
 
     fun processCrop(clickX: Int, clickY: Int) {
