@@ -13,13 +13,15 @@ import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.WebView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toColorInt
-import com.google.android.material.bottomsheet.BottomSheetDialog
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -33,9 +35,8 @@ import java.io.IOException
 import java.io.OutputStream
 
 /**
- * 专门处理漫画 OCR 逻辑的管理类
+ * 专门处理漫画 OCR 逻辑的管理类 (Management class for Manga OCR logic)
  */
-// 定义单词数据结构
 data class JapaneseWord(
     val surface: String,
     val baseForm: String,
@@ -45,7 +46,7 @@ data class JapaneseWord(
 
 data class OcrResponse(
     val text: String,
-    val translation: String, // 核心：增加这一行
+    val translation: String,
     val words: List<JapaneseWord>
 ) {
     companion object {
@@ -62,7 +63,7 @@ data class OcrResponse(
             }
             return OcrResponse(
                 text = json.optString("text"),
-                translation = json.optString("translation"), // 解析翻译
+                translation = json.optString("translation"),
                 words = wordList
             )
         }
@@ -71,15 +72,9 @@ data class OcrResponse(
 
 class MangaOcrManager(private val webView: WebView) {
 
-    // 定义切图大小
     private val cropSize = 600
-    private val client = OkHttpClient() // 单例客户端
+    private val client = OkHttpClient()
 
-    /**
-     * 执行局部切图的核心函数
-     * @param clickX 点击的 X 坐标
-     * @param clickY 点击的 Y 坐标
-     */
     fun processCrop(clickX: Int, clickY: Int) {
         if (webView.width <= 0 || webView.height <= 0) return
 
@@ -93,169 +88,75 @@ class MangaOcrManager(private val webView: WebView) {
         val left = (clickX - half).coerceIn(0, (webView.width - actualWidth).coerceAtLeast(0))
         val top = (clickY - half).coerceIn(0, (webView.height - actualHeight).coerceAtLeast(0))
 
-        // 核心计算：点击点在小图里的相对位置
         val relX = clickX - left
         val relY = clickY - top
 
         val cropped = Bitmap.createBitmap(fullBitmap, left, top, actualWidth, actualHeight)
-
-        // 调试用：保存到本地
-        //saveBitmapToDownload(webView.context, cropped, "crop_${System.currentTimeMillis()}")
-
-        // 转码并发送
         val base64String = bitmapToBase64(cropped)
-        // 修改这里的调用，传入相对坐标和绝对点击 Y 轴坐标 (Pass relative coordinates and absolute Y click position)
         sendToOcrServer(base64String, relX, relY, clickY)
     }
 
-    // 1. 修改参数列表，增加 absClickY 以便后续避开焦点 (Add absClickY to avoid blocking focus later)
     private fun sendToOcrServer(base64Image: String, relX: Int, relY: Int, absClickY: Int) {
-        // 从 SharedPreferences 获取最新的 OCR 服务器地址 (Fetch the latest OCR server URL)
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
-        // 默认值设为空字符串 (Default value set to empty string)
         val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
-        // 直接在 serverUrl 后拼接 /ocr (Append /ocr to serverUrl)
         val ocrUrl = "${serverUrl}/ocr"
 
-        if (ocrUrl.isEmpty()) {
+        if (ocrUrl.isEmpty() || serverUrl.isEmpty()) {
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(webView.context, "请先在“更多设置”中配置 OCR 服务器地址", Toast.LENGTH_LONG).show()
             }
             return
         }
 
-        // 2. 在 JSON 中加入坐标
         val json = JSONObject().apply {
             put("image", base64Image)
-            put("x", relX) // 传入相对坐标 X
-            put("y", relY) // 传入相对坐标 Y
+            put("x", relX)
+            put("y", relY)
         }.toString()
 
         val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
         
         try {
             val request = Request.Builder().url(ocrUrl).post(body).build()
-
-            Log.d("MangaOcr", "正在发送请求 (含坐标 $relX, $relY) 到: $ocrUrl")
-
             client.newCall(request).enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
-                        if (!response.isSuccessful) {
-                            Log.e("MangaOcr", "服务器返回错误: ${response.code}")
-                            Handler(Looper.getMainLooper()).post {
-                                Toast.makeText(webView.context, "OCR 服务器响应错误: ${response.code}", Toast.LENGTH_SHORT).show()
-                            }
-                            return
-                        }
-
+                        if (!response.isSuccessful) return
                         val bodyString = response.body?.string() ?: ""
-                        if (bodyString.isEmpty()) {
-                            Log.e("MangaOcr", "服务器返回内容为空")
-                            return
-                        }
-
                         try {
                             val ocrResult = OcrResponse.fromJson(bodyString)
-                            Log.d("MangaOcrResult", "成功识别: ${ocrResult.text}")
-
                             Handler(Looper.getMainLooper()).post {
-                                // 传递点击位置 (Pass click position)
                                 showResultBottomSheet(ocrResult, absClickY)
                             }
-                        } catch (e: Exception) {
-                            Log.e("MangaOcr", "JSON 解析失败: ${e.message}")
-                        }
+                        } catch (e: Exception) {}
                     }
                 }
-
-                override fun onFailure(call: Call, e: IOException) {
-                    Log.e("MangaOcr", "网络请求失败: ${e.message}")
-                    Handler(Looper.getMainLooper()).post {
-                        Toast.makeText(webView.context, "无法连接到 OCR 服务器，请检查地址", Toast.LENGTH_LONG).show()
-                    }
-                }
+                override fun onFailure(call: Call, e: IOException) {}
             })
-        } catch (e: Exception) {
-            Log.e("MangaOcr", "URL 格式错误: ${e.message}")
-            Handler(Looper.getMainLooper()).post {
-                Toast.makeText(webView.context, "OCR 地址格式错误", Toast.LENGTH_SHORT).show()
-            }
-        }
+        } catch (e: Exception) {}
     }
 
     private fun bitmapToBase64(bitmap: Bitmap): String {
         val outputStream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
-        val byteArray = outputStream.toByteArray()
-        return Base64.encodeToString(byteArray, Base64.NO_WRAP)
-    }
-
-    fun saveBitmapToDownload(context: Context, bitmap: Bitmap, fileName: String) {
-        val relativePath = Environment.DIRECTORY_PICTURES + "/MangaCrop"
-        val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, "$fileName.jpg")
-            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
-                put(MediaStore.MediaColumns.IS_PENDING, 1)
-            }
-        }
-
-        val resolver = context.contentResolver
-        val contentUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        var uri: Uri? = null
-
-        try {
-            uri = resolver.insert(contentUri, contentValues)
-            uri?.let {
-                val outputStream: OutputStream? = resolver.openOutputStream(it)
-                outputStream?.use { stream ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    contentValues.clear()
-                    contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                    resolver.update(it, contentValues, null, null)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("MangaOcr", "保存失败: ${e.message}")
-            uri?.let { resolver.delete(it, null, null) }
-        }
+        return Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
     }
 
     private fun showResultBottomSheet(result: OcrResponse, absClickY: Int) {
         Handler(Looper.getMainLooper()).post {
             val context = webView.context
-            // 使用标准 Dialog 实现浮动模式 (Use standard Dialog for floating mode)
             val dialog = android.app.Dialog(context)
             dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
 
-            // --- 墨水屏优化与精准悬浮 (E-ink Optimization & Precise Floating) ---
-            dialog.window?.let { window ->
-                // 1. 禁用背景变暗 (Keep background clear)
-                window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                // 2. 移除弹出动画 (No ghosting on E-ink)
-                window.setWindowAnimations(0)
-                // 3. 背景透明
-                window.setBackgroundDrawableResource(android.R.color.transparent)
-                // 4. 消除系统边距，确保宽度能真正铺满 (Clear default padding for true full width)
-                window.decorView.setPadding(0, 0, 0, 0)
-            }
-
             val view = LayoutInflater.from(context).inflate(R.layout.layout_ocr_result, null)
-
             val tvTranslation = view.findViewById<TextView>(R.id.text_translation)
             val tvFullOcr = view.findViewById<TextView>(R.id.text_full_ocr)
             val containerWords = view.findViewById<LinearLayout>(R.id.container_words)
 
-            // 实现复制按钮逻辑
-            view.findViewById<android.view.View>(R.id.btn_copy)?.setOnClickListener {
+            view.findViewById<View>(R.id.btn_copy)?.setOnClickListener {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText("OCR Text", result.text)
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("OCR Text", result.text))
+                Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
             }
 
             tvFullOcr.text = result.text
@@ -264,15 +165,10 @@ class MangaOcrManager(private val webView: WebView) {
 
             result.words.forEach { word ->
                 val wordView = TextView(context).apply {
-                    text = if (word.surface == word.baseForm) {
-                        "${word.surface}\n "
-                    } else {
-                        "${word.surface}\n[${word.baseForm}]"
-                    }
+                    text = if (word.surface == word.baseForm) "${word.surface}\n " else "${word.surface}\n[${word.baseForm}]"
                     textSize = 12f
-                    setPadding(25, 12, 25, 12)
+                    setPadding(20, 10, 20, 10)
                     gravity = android.view.Gravity.CENTER
-
                     val bgColor = when {
                         word.pos.contains("名") -> "#E3F2FD"
                         word.pos.contains("动") -> "#E8F5E9"
@@ -280,58 +176,69 @@ class MangaOcrManager(private val webView: WebView) {
                         word.pos.contains("助") -> "#F5F5F5"
                         else -> "#FFFFFF"
                     }
-
-                    val strokeColor = when {
-                        word.pos.contains("名") -> "#2196F3"
-                        word.pos.contains("动") -> "#4CAF50"
-                        else -> "#CCCCCC"
-                    }
-
                     background = android.graphics.drawable.GradientDrawable().apply {
                         setColor(bgColor.toColorInt())
-                        cornerRadius = 12f
-                        setStroke(2, strokeColor.toColorInt())
-                    }
-
-                    setOnClickListener {
-                        val detail = "【${word.reading}】\n类型: ${word.pos}"
-                        Toast.makeText(context, detail, Toast.LENGTH_SHORT).show()
+                        cornerRadius = 8f
+                        setStroke(1, "#DDDDDD".toColorInt())
                     }
                 }
-
-                val params = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    setMargins(0, 10, 20, 10)
-                }
-                containerWords.addView(wordView, params)
+                containerWords.addView(wordView, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(0, 8, 16, 8)
+                })
             }
 
+            // --- 核心修复：预先测量布局高度 (Pre-measure height to avoid jump) ---
+            val displayMetrics = context.resources.displayMetrics
+            val screenHeight = displayMetrics.heightPixels
+            val screenWidth = displayMetrics.widthPixels
+            
+            // 模拟测量布局 (Measure the view before showing)
+            view.measure(
+                View.MeasureSpec.makeMeasureSpec(screenWidth, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            val actualDialogHeight = view.measuredHeight
+
             dialog.setContentView(view)
-            dialog.show()
 
-            // 【核心修复】：在 show() 之后强制设置宽高。解决“很窄”的问题 (Fix "narrow" issue by setting layout after show())
             dialog.window?.let { window ->
-                val displayMetrics = context.resources.displayMetrics
-                val screenHeight = displayMetrics.heightPixels
+                // 1. 禁用背景变暗 (No dim behind)
+                window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                // 2. 彻底禁用系统动画 (Crucial: Completely disable window animations)
+                window.setWindowAnimations(0) 
+                window.attributes.windowAnimations = 0
                 
-                // 强制应用全宽，并将高度锁定在屏幕的 30% (Force full width and ~30% height)
-                window.setLayout(
-                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                    (screenHeight * 0.30).toInt()
-                )
+                window.setBackgroundDrawableResource(android.R.color.transparent)
+                window.decorView.setPadding(0, 0, 0, 0)
 
-                // 重新设置位置 (Apply gravity again)
                 val params = window.attributes
-                if (absClickY > screenHeight * 0.5) {
-                    params.gravity = android.view.Gravity.TOP
+                params.width = WindowManager.LayoutParams.MATCH_PARENT
+                params.height = WindowManager.LayoutParams.WRAP_CONTENT
+                params.gravity = android.view.Gravity.TOP or android.view.Gravity.START
+
+                val safeZone = 50 // 避开中心 100px 范围
+
+                // 精准像素级定位逻辑 (Pixel-perfect positioning)
+                if (absClickY - safeZone - actualDialogHeight > 0) {
+                    params.y = absClickY - safeZone - actualDialogHeight
+                } else if (absClickY + safeZone + actualDialogHeight < screenHeight) {
+                    params.y = absClickY + safeZone
                 } else {
-                    params.gravity = android.view.Gravity.BOTTOM
+                    // 如果放不下，则通过固定高度和 ScrollView 适配 (Fallback for long content)
+                    if (absClickY > screenHeight / 2) {
+                        params.y = 0
+                        params.height = absClickY - safeZone
+                    } else {
+                        params.y = absClickY + safeZone
+                        params.height = screenHeight - (absClickY + safeZone)
+                    }
                 }
                 window.attributes = params
             }
 
+            // 直接显示，此时位置已定，且动画已禁 (Show now with fixed position and no anim)
+            dialog.show()
             fetchTranslationAsync(tvTranslation)
         }
     }
@@ -347,15 +254,12 @@ class MangaOcrManager(private val webView: WebView) {
                 val response = client.newCall(request).execute()
                 val json = JSONObject(response.body?.string() ?: "")
                 val translation = json.optString("translation")
-
                 Handler(Looper.getMainLooper()).post {
                     textView.text = translation
                     textView.alpha = 1.0f
                 }
             } catch (e: Exception) {
-                Handler(Looper.getMainLooper()).post {
-                    textView.text = "翻译加载失败"
-                }
+                Handler(Looper.getMainLooper()).post { textView.text = "翻译加载失败" }
             }
         }.start()
     }
