@@ -4,7 +4,6 @@ package com.suwayomi.go
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.app.DownloadManager
-import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -131,15 +130,15 @@ class MainActivity : AppCompatActivity() {
                 // 当进度达到 100% 且加载视图可见时，启动验证与延迟隐藏逻辑
                 // (Trigger verification and delayed hide logic when progress is 100%)
                 if (newProgress == 100 && loadingView.isVisible && loadingView.tag == null) {
-                    loadingView.tag = "verifying" 
-                    
+                    loadingView.tag = "verifying"
+
                     performSuwayomiVerification(view) { isSuwayomi ->
                         // 确保在验证期间没有发生新的页面加载 (Ensure no new load started during verification)
                         if (loadingView.tag != "verifying") return@performSuwayomiVerification
 
                         if (isSuwayomi) {
                             loadingView.tag = "is_ending" // 标记正在处理结束逻辑
-                            
+
                             // 核心修复：如果通过自动回退成功访问，将成功的 URL 保存回配置 (Save successful fallback URL to prefs)
                             val currentUrl = view?.url
                             if (!currentUrl.isNullOrEmpty()) {
@@ -205,7 +204,7 @@ class MainActivity : AppCompatActivity() {
                 // 核心修改：根据当前 URL 状态同步下拉刷新的启用状态 (Sync swipe refresh state based on URL)
                 val isChapterPage = url?.contains("chapter") == true
                 swipeRefresh.isEnabled = !isChapterPage
-                
+
                 // 核心逻辑：退出章节页面时自动关闭 OCR 监听状态 (Automatically disable OCR mode when leaving chapter)
                 if (!isChapterPage) {
                     isOcrEnabled = false
@@ -214,10 +213,10 @@ class MainActivity : AppCompatActivity() {
                 // 核心逻辑：页面刷新（或开始加载新页面）时触发动画并隐藏内容
                 // 确保“首次冷启动”和“页面刷新”都能看到加载效果 (Ensure load visibility on cold start/refresh)
                 webView.visibility = View.INVISIBLE
-                
+
                 // 每次开始加载新页面时，重置 tag 为 null，允许正常的“加载完成逻辑”触发 (Reset tag for new load)
                 // 这也会清除回退过程中设置的临时 tag
-                loadingView.tag = null 
+                loadingView.tag = null
 
                 if (loadingView.visibility != View.VISIBLE) {
                     loadingView.visibility = View.VISIBLE
@@ -238,7 +237,7 @@ class MainActivity : AppCompatActivity() {
                 if (view?.tag == "auth_failed") {
                     view.tag = null
                     handler?.cancel()
-                    
+
                     // 核心修改：在验证失败时，立即在 UI 线程隐藏 WebView 并显示加载动画，遮盖即将出现的错误页面
                     // 同时通过设置特定的 tag，拦截 onProgressChanged 的“自动显示”逻辑
                     // (Hide WebView and show loading on auth failure, lock tag to prevent reveal)
@@ -314,23 +313,23 @@ class MainActivity : AppCompatActivity() {
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                 if (request?.isForMainFrame == true) {
                     val failingUrl = request.url.toString()
-                    
+
                     // 核心修改：自动协议适应逻辑 (Auto-protocol adaptation logic)
                     // 如果优先尝试的 https 失败了且之前没试过回退，则尝试回退到 http
                     if (failingUrl.startsWith("https://") && !isAutoProtocolFallback) {
                         isAutoProtocolFallback = true
                         // 核心改动：标记正在回退中，防止错误页面的进度 100% 提前触发配置窗 (Mark fallback to prevent premature config dialog)
                         loadingView.tag = "protocol_fallback"
-                        
+
                         val fallbackUrl = failingUrl.replaceFirst("https://", "http://")
                         view?.post { view.loadUrl(fallbackUrl) }
                         return
                     }
-                    
+
                     // 彻底失败或无需回退时重置标记
                     isAutoProtocolFallback = false
                     swipeRefresh.isRefreshing = false
-                    
+
                     // 核心修改：连接失败（包括验证取消）时，保持 WebView 隐藏，使用加载图遮盖原生的错误页面
                     // (Keep WebView hidden and lock loading view on connection error)
                     webView.visibility = View.INVISIBLE
@@ -341,7 +340,7 @@ class MainActivity : AppCompatActivity() {
                         val pulse = AnimationUtils.loadAnimation(this@MainActivity, R.anim.pulse_animation)
                         loadingView.startAnimation(pulse)
                     }
-                    
+
                     Toast.makeText(this@MainActivity, "连接失败，请检查配置", Toast.LENGTH_LONG).show()
                     showConfigDialog()
                 }
@@ -362,9 +361,9 @@ class MainActivity : AppCompatActivity() {
                             .setPositiveButton("下载") { _, _ -> saveImageToGallery(imageUrl) }
                             .setNegativeButton("取消", null)
                             .create()
-                        
+
                         dialog.show()
-                        
+
                         // 按钮颜色定制为 #3581b2 (Custom button color)
                         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
                         dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
@@ -419,7 +418,7 @@ class MainActivity : AppCompatActivity() {
             // 这样用户在 OCR 模式下无法通过滑动或点击进行翻页。
             // 否则返回 false，让 WebView 正常处理交互。
             if (isOcrEnabled && isChapterPage) {
-                true 
+                true
             } else {
                 false
             }
@@ -538,7 +537,7 @@ class MainActivity : AppCompatActivity() {
             .create()
 
         dialog.show()
-        
+
         // 在 show() 之后获取按钮并设置逻辑，这样可以控制对话框不自动关闭 (Get buttons after show() to control dismissal manually)
         val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
         val negativeButton = dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
@@ -573,7 +572,7 @@ class MainActivity : AppCompatActivity() {
                 if (isChanged) {
                     // 核心逻辑：如果配置发生变更，放弃尝试立即生效，转而冻结界面并提示用户彻底重启 (Freeze UI and prompt restart if info changed)
                     // 这应对 WebView 内存缓存顽疾的最稳妥策略。
-                    
+
                     // 1. 立即保存新配置到存储 (Save new config immediately)
                     prefs.edit {
                         putString("url", url)
@@ -585,7 +584,7 @@ class MainActivity : AppCompatActivity() {
                     webView.stopLoading()
                     webView.visibility = View.GONE
                     swipeRefresh.isEnabled = false
-                    
+
                     // 3. 弹出无法取消的提示框以冻结操作 (Show non-dismissible prompt to freeze operations)
                     val restartDialog = AlertDialog.Builder(this@MainActivity)
                         .setTitle("配置已更新")
@@ -612,20 +611,20 @@ class MainActivity : AppCompatActivity() {
                                 putString("pass", oldPass)
                             }
                             webView.visibility = View.VISIBLE
-                            
+
                             // 恢复刷新状态：根据旧 URL 逻辑同步 (Sync refresh state)
                             val isChapterPage = oldUrl.contains("chapter")
                             swipeRefresh.isEnabled = !isChapterPage
-                            
+
                             // 重新加载原 URL (Reload original URL)
                             webView.loadUrl(oldUrl)
                         }
                         .show()
-                    
+
                     // 定制按钮颜色
                     restartDialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
                     restartDialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
-                    
+
                     // 关闭配置对话框 (Dismiss config dialog)
                     dialog.dismiss()
                 } else {
@@ -647,7 +646,7 @@ class MainActivity : AppCompatActivity() {
         val view = LayoutInflater.from(this).inflate(R.layout.more_settings, null)
         val checkVolumePaging = view.findViewById<SwitchCompat>(R.id.checkVolumePaging)
         val editOcrUrl = view.findViewById<EditText>(R.id.editOcrUrl) // 新增 OCR 地址填写框 (Add OCR URL edit field)
-        
+
         // 加载当前保存的状态 (Load saved states)
         checkVolumePaging.isChecked = prefs.getBoolean("volume_paging", true)
         editOcrUrl.setText(prefs.getString("ocr_server_url", "http://192.168.137.1:12233/ocr"))
@@ -664,7 +663,7 @@ class MainActivity : AppCompatActivity() {
             .create()
 
         dialog.show()
-        
+
         // 定制按钮颜色
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
@@ -672,7 +671,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         // 核心用意：通过音量键实现翻页，并配合 flashView 动画掩盖翻页时的视觉突变 (Use volume keys for paging with flash animation)
-        
+
         // 优化 1：仅在章节阅读页面拦截音量键，普通页面（如设置、书架）保留系统音量控制
         val isChapterPage = webView.url?.contains("chapter") == true
         if (isChapterPage && (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)) {
@@ -691,7 +690,7 @@ class MainActivity : AppCompatActivity() {
                     isLongPressHandled = true
                     // 这里可以实现长按音量下的功能，例如直接跳转到下一章
                     // (Handle long press volume down, e.g., skip to next chapter)
-                    Toast.makeText(this, "长按音量下：下一章 (示例)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "长按音量下：此快捷键暂留", Toast.LENGTH_SHORT).show()
                     return true
                 }
                 KeyEvent.KEYCODE_VOLUME_UP -> {
@@ -803,7 +802,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 // 普通页面清除全屏和隐藏导航栏的 Flag (Clear flags for normal pages)
                 window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                
+
                 // 针对 Android 6.0+，清除 LIGHT_STATUS_BAR 确保图标在黑色背景下是白色的
                 // (For Android M+, ensure icons are light to contrast with BLACK background)
                 var flags = window.decorView.systemUiVisibility

@@ -135,17 +135,17 @@ class MangaOcrManager(private val webView: WebView) {
                             Handler(Looper.getMainLooper()).post {
                                 showResultBottomSheet(ocrResult, absClickY)
                             }
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             Log.e("MangaOcr", "Parse failed")
                         }
                     }
                 }
                 override fun onFailure(call: Call, e: IOException) {
-                    Log.e("MangaOcr", "Network error")
+                    Log.e("MangaOcr", "Network error: ${e.message}")
                 }
             })
         } catch (e: Exception) {
-            Log.e("MangaOcr", "Request error")
+            Log.e("MangaOcr", "Request error: ${e.message}")
         }
     }
 
@@ -155,7 +155,7 @@ class MangaOcrManager(private val webView: WebView) {
         return Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
     }
 
-    @SuppressLint("ClickableViewAccessibility")
+    @SuppressLint("ClickableViewAccessibility", "InflateParams", "SetTextI18n")
     private fun showResultBottomSheet(result: OcrResponse, absClickY: Int) {
         Handler(Looper.getMainLooper()).post {
             val context = webView.context
@@ -266,24 +266,27 @@ class MangaOcrManager(private val webView: WebView) {
                 window.attributes = params
 
                 // --- 实现手动拖动功能 (Implement manual dragging) ---
-                var initialX = 0f
-                var initialY = 0f
-                var initialTouchX = 0f
-                var initialTouchY = 0f
+                // 修复：通过对象封装拖动状态，解决变量被认为“未读取”的警告 (Fix: Encapsulate drag state in an object)
+                val dragState = object {
+                    var x = 0f
+                    var y = 0f
+                    var touchX = 0f
+                    var touchY = 0f
+                }
 
                 dragHandleContainer.setOnTouchListener { v, event ->
                     when (event.action) {
                         MotionEvent.ACTION_DOWN -> {
-                            initialX = params.x.toFloat()
-                            initialY = params.y.toFloat()
-                            initialTouchX = event.rawX
-                            initialTouchY = event.rawY
+                            dragState.x = params.x.toFloat()
+                            dragState.y = params.y.toFloat()
+                            dragState.touchX = event.rawX
+                            dragState.touchY = event.rawY
                             v.performClick()
                             true
                         }
                         MotionEvent.ACTION_MOVE -> {
-                            params.x = (initialX + (event.rawX - initialTouchX)).toInt()
-                            params.y = (initialY + (event.rawY - initialTouchY)).toInt()
+                            params.x = (dragState.x + (event.rawX - dragState.touchX)).toInt()
+                            params.y = (dragState.y + (event.rawY - dragState.touchY)).toInt()
                             window.attributes = params // 实时更新 (Real-time update)
                             true
                         }
@@ -313,7 +316,7 @@ class MangaOcrManager(private val webView: WebView) {
                     textView.text = translation
                     textView.alpha = 1.0f
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 Handler(Looper.getMainLooper()).post { textView.text = "翻译加载失败" }
             }
         }.start()
