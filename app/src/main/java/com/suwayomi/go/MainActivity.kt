@@ -45,6 +45,12 @@ import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
 import kotlin.math.abs
 
 
@@ -516,12 +522,76 @@ class MainActivity : AppCompatActivity() {
         val editUrl = view.findViewById<EditText>(R.id.editUrl)
         val editUser = view.findViewById<EditText>(R.id.editUser)
         val editPass = view.findViewById<EditText>(R.id.editPass)
+        val btnTestUrl = view.findViewById<View>(R.id.btnTestUrl) // 获取测试按钮 (Get test button)
 
         val savedUrl = prefs.getString("url", "")
         // 修改：初始不强制填充协议，保持整洁 (Keep input clean, don't force prefix)
         editUrl.setText(savedUrl)
         editUser.setText(prefs.getString("user", ""))
         editPass.setText(prefs.getString("pass", ""))
+
+        btnTestUrl.setOnClickListener {
+            var rawInput = editUrl.text.toString().trim()
+            if (rawInput.isEmpty()) {
+                Toast.makeText(this, "请输入服务器地址", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            // 自动纠错：替换中文冒号 (Sanitize: Replace Chinese colon)
+            if (rawInput.contains("：")) {
+                rawInput = rawInput.replace("：", ":")
+                editUrl.setText(rawInput)
+            }
+
+            Toast.makeText(this, "正在测试连接...", Toast.LENGTH_SHORT).show()
+
+            fun performTest(baseUrl: String, fallbackToHttps: Boolean) {
+                try {
+                    val client = OkHttpClient()
+                    val request = Request.Builder().url(baseUrl).build()
+
+                    client.newCall(request).enqueue(object : Callback {
+                        override fun onFailure(call: Call, e: IOException) {
+                            if (fallbackToHttps) {
+                                runOnUiThread { performTest("https://$rawInput", false) }
+                            } else {
+                                runOnUiThread {
+                                    Toast.makeText(this@MainActivity, "连接失败: ${e.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+
+                        override fun onResponse(call: Call, response: Response) {
+                            // Suwayomi 即使没验证也会返回 401，这说明服务器是连通的 (Reachable even if 401)
+                            val isReachable = response.isSuccessful || response.code == 401
+                            runOnUiThread {
+                                if (isReachable) {
+                                    editUrl.setText(baseUrl)
+                                    Toast.makeText(this@MainActivity, "连接成功！", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    if (fallbackToHttps) {
+                                        performTest("https://$rawInput", false)
+                                    } else {
+                                        Toast.makeText(this@MainActivity, "服务器响应错误: ${response.code}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            response.close()
+                        }
+                    })
+                } catch (_: Exception) {
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "URL 格式无效，请检查符号", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+
+            if (!rawInput.startsWith("http://") && !rawInput.startsWith("https://")) {
+                performTest("http://$rawInput", true)
+            } else {
+                performTest(rawInput, false)
+            }
+        }
 
         val dialog = AlertDialog.Builder(this)
             .setTitle("服务器配置")
@@ -646,10 +716,84 @@ class MainActivity : AppCompatActivity() {
         val view = LayoutInflater.from(this).inflate(R.layout.more_settings, null)
         val checkVolumePaging = view.findViewById<SwitchCompat>(R.id.checkVolumePaging)
         val editOcrUrl = view.findViewById<EditText>(R.id.editOcrUrl) // 新增 OCR 地址填写框 (Add OCR URL edit field)
+        val btnTestOcr = view.findViewById<View>(R.id.btnTestOcr) // 新增测试连接按钮 (Add Test Connection button)
 
         // 加载当前保存的状态 (Load saved states)
         checkVolumePaging.isChecked = prefs.getBoolean("volume_paging", true)
         editOcrUrl.setText(prefs.getString("ocr_server_url", "http://192.168.137.1:12233/ocr"))
+
+        btnTestOcr.setOnClickListener {
+            var rawInput = editOcrUrl.text.toString().trim()
+            if (rawInput.isEmpty()) {
+                Toast.makeText(this, "请输入服务器地址", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            // 核心修复：将中文冒号替换为英文冒号，防止 OkHttp 因无法解析非法字符而崩溃
+            // (Sanitize: Replace Chinese colon with English colon to prevent OkHttp crash)
+            if (rawInput.contains("：")) {
+                rawInput = rawInput.replace("：", ":")
+                editOcrUrl.setText(rawInput) // 同步到 UI 提升用户体验
+            }
+
+            Toast.makeText(this, "正在测试连接...", Toast.LENGTH_SHORT).show()
+
+            // 定义内部测试函数，支持协议回退逻辑 (Internal test function with protocol fallback)
+            fun performTest(baseUrl: String, fallbackToHttps: Boolean) {
+                // 构建测试地址：MangaOcrManager 实际访问的是 /ocr 路径 (MangaOcrManager hits /ocr)
+                val testUrl = if (baseUrl.endsWith("/")) "${baseUrl}ocr" else "$baseUrl/ocr"
+                
+                try {
+                    val client = OkHttpClient()
+                    val request = Request.Builder().url(testUrl).build()
+
+                    client.newCall(request).enqueue(object : Callback {
+                        override fun onFailure(call: Call, e: IOException) {
+                            if (fallbackToHttps) {
+                                // HTTP 失败，尝试自动回退到 HTTPS (HTTP failed, try fallback to HTTPS)
+                                runOnUiThread { performTest("https://$rawInput", false) }
+                            } else {
+                                runOnUiThread {
+                                    Toast.makeText(this@MainActivity, "连接失败: ${e.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+
+                        override fun onResponse(call: Call, response: Response) {
+                            // 如果是 200 或 405 (Method Not Allowed) 都说明连通了
+                            val isSuccess = response.isSuccessful || response.code == 405
+                            runOnUiThread {
+                                if (isSuccess) {
+                                    // 核心修改：测试成功后，将补全后的协议 URL 填回输入框 (Fill back the completed URL to EditText on success)
+                                    editOcrUrl.setText(baseUrl)
+                                    Toast.makeText(this@MainActivity, "连接成功！", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    if (fallbackToHttps) {
+                                        performTest("https://$rawInput", false)
+                                    } else {
+                                        Toast.makeText(this@MainActivity, "服务器响应错误: ${response.code}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            response.close()
+                        }
+                    })
+                } catch (_: Exception) {
+                    // 核心修改：捕获非法 URL 导致的异常，避免应用崩溃 (Catch exceptions from malformed URLs)
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "URL 格式无效，请检查符号", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+
+            // 初始逻辑：判断是否带协议。如果不带，默认先试 http，失败后试 https。
+            // (Initial logic: Check if protocol exists. If not, try http then https)
+            if (!rawInput.startsWith("http://") && !rawInput.startsWith("https://")) {
+                performTest("http://$rawInput", true)
+            } else {
+                performTest(rawInput, false)
+            }
+        }
 
         val dialog = AlertDialog.Builder(this)
             .setView(view)

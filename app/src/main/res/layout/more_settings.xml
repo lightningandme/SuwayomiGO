@@ -45,7 +45,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="OCR日文识别"
+                android:text="OCR日语助手"
                 android:textSize="20sp"
                 android:textColor="#3581b2"
                 android:textStyle="bold"
@@ -66,6 +66,16 @@
                     android:inputType="textUri"
                     android:textSize="14sp" />
             </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnTestOcr"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:text="测试连接"
+                android:textColor="#3581b2"
+                tools:ignore="HardcodedText" />
             
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
