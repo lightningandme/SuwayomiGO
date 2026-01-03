@@ -45,7 +45,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="OCR日语助手"
+                android:text="OCR日语翻译"
                 android:textSize="20sp"
                 android:textColor="#3581b2"
                 android:textStyle="bold"
