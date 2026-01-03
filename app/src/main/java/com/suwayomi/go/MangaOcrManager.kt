@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Base64
 import android.util.Log
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -100,7 +101,7 @@ class MangaOcrManager(private val webView: WebView) {
         // 取 ": Chapter" 之前的所有字符 (Get all characters before ": Chapter")
         val fullTitle = webView.title ?: ""
         val mangaName = fullTitle.substringBefore(": Chapter")
-        Log.e("MangaOcr", mangaName)
+        Log.d("MangaOcr", mangaName)
 
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
         val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
@@ -158,7 +159,24 @@ class MangaOcrManager(private val webView: WebView) {
     private fun showResultBottomSheet(result: OcrResponse, absClickY: Int) {
         Handler(Looper.getMainLooper()).post {
             val context = webView.context
-            val dialog = android.app.Dialog(context)
+            
+            // --- 彻底拦截：通过匿名类重写 dispatchKeyEvent (Full interception via override) ---
+            val dialog = object : android.app.Dialog(context) {
+                override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+                    val keyCode = event.keyCode
+                    // 拦截音量上键和下键，防止在弹窗显示时触发翻页 (Intercept Volume keys to prevent paging)
+                    if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                        // 核心修复：如果在 ACTION_DOWN 时就 dismiss，随后的 ACTION_UP 事件会因弹窗消失而传递给 Activity，
+                        // 从而触发 Activity 中的翻页逻辑。因此我们改为在 ACTION_UP 时才执行 dismiss。
+                        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP && event.action == KeyEvent.ACTION_UP) {
+                            this.dismiss()
+                        }
+                        // 关键：无论按下还是抬起，都返回 true，表示该事件被“吞掉”了，不会传给底层组件
+                        return true 
+                    }
+                    return super.dispatchKeyEvent(event)
+                }
+            }
             dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
 
             val view = LayoutInflater.from(context).inflate(R.layout.layout_ocr_result, null)
@@ -228,7 +246,7 @@ class MangaOcrManager(private val webView: WebView) {
                 params.height = WindowManager.LayoutParams.WRAP_CONTENT
                 params.gravity = android.view.Gravity.TOP or android.view.Gravity.START
 
-                val safeZone = screenWidth.coerceAtMost(screenHeight) / 5
+                val safeZone = screenWidth.coerceAtMost(screenHeight) / 8
 
                 // 初始定位 (Initial Positioning)
                 if (absClickY - safeZone - actualDialogHeight > 0) {
@@ -244,27 +262,28 @@ class MangaOcrManager(private val webView: WebView) {
                         params.height = screenHeight - (absClickY + safeZone)
                     }
                 }
+                params.x = (screenWidth - view.measuredWidth) / 2
                 window.attributes = params
 
                 // --- 实现手动拖动功能 (Implement manual dragging) ---
-                var initialX = 0
-                var initialY = 0
+                var initialX = 0f
+                var initialY = 0f
                 var initialTouchX = 0f
                 var initialTouchY = 0f
 
                 dragHandleContainer.setOnTouchListener { v, event ->
                     when (event.action) {
                         MotionEvent.ACTION_DOWN -> {
-                            initialX = params.x
-                            initialY = params.y
+                            initialX = params.x.toFloat()
+                            initialY = params.y.toFloat()
                             initialTouchX = event.rawX
                             initialTouchY = event.rawY
                             v.performClick()
                             true
                         }
                         MotionEvent.ACTION_MOVE -> {
-                            params.x = initialX + (event.rawX - initialTouchX).toInt()
-                            params.y = initialY + (event.rawY - initialTouchY).toInt()
+                            params.x = (initialX + (event.rawX - initialTouchX)).toInt()
+                            params.y = (initialY + (event.rawY - initialTouchY)).toInt()
                             window.attributes = params // 实时更新 (Real-time update)
                             true
                         }
