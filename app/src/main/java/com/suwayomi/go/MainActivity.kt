@@ -221,7 +221,7 @@ class MainActivity : AppCompatActivity() {
                 webView.visibility = View.INVISIBLE
 
                 // 每次开始加载新页面时，重置 tag 为 null，允许正常的“加载完成逻辑”触发 (Reset tag for new load)
-                // 这也会清除回退过程中设置的临时 tag
+                // This would also clear temporary tags set during fallbacks
                 loadingView.tag = null
 
                 if (loadingView.visibility != View.VISIBLE) {
@@ -245,7 +245,6 @@ class MainActivity : AppCompatActivity() {
                     handler?.cancel()
 
                     // 核心修改：在验证失败时，立即在 UI 线程隐藏 WebView 并显示加载动画，遮盖即将出现的错误页面
-                    // 同时通过设置特定的 tag，拦截 onProgressChanged 的“自动显示”逻辑
                     // (Hide WebView and show loading on auth failure, lock tag to prevent reveal)
                     runOnUiThread {
                         webView.visibility = View.INVISIBLE
@@ -321,10 +320,9 @@ class MainActivity : AppCompatActivity() {
                     val failingUrl = request.url.toString()
 
                     // 核心修改：自动协议适应逻辑 (Auto-protocol adaptation logic)
-                    // 如果优先尝试的 https 失败了且之前没试过回退，则尝试回退到 http
                     if (failingUrl.startsWith("https://") && !isAutoProtocolFallback) {
                         isAutoProtocolFallback = true
-                        // 核心改动：标记正在回退中，防止错误页面的进度 100% 提前触发配置窗 (Mark fallback to prevent premature config dialog)
+                        // Mark fallback to prevent premature config dialog
                         loadingView.tag = "protocol_fallback"
 
                         val fallbackUrl = failingUrl.replaceFirst("https://", "http://")
@@ -354,7 +352,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.setOnLongClickListener {
-            // 核心修改：仅在 URL 包含 "chapter" 字段时激活长按保存功能 (Activate long-press save only if URL contains "chapter")
+            // Activate long-press save only if URL contains "chapter"
             val currentUrl = webView.url
             if (currentUrl?.contains("chapter") == true) {
                 val result = webView.hitTestResult
@@ -383,46 +381,37 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-    // 定义点击判定的阈值，防止滑动翻页时误触发截图
     private var lastDownX = 0f
     private var lastDownY = 0f
     private val clickTHRESHOLD = 10f
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupMangaOcrTouch() {
-        // 使用 _ 替换未使用的参数 v (Replace unused parameter 'v' with '_')
         webView.setOnTouchListener { _, event ->
-            // 检查当前是否在章节页面 (Check if current page is a chapter page)
             val isChapterPage = webView.url?.contains("chapter") == true
 
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    // 记录手指按下的位置
                     lastDownX = event.x
                     lastDownY = event.y
                 }
                 MotionEvent.ACTION_UP -> {
-                    // 计算手指抬起与按下的距离偏移
                     val deltaX = abs(event.x - lastDownX)
                     val deltaY = abs(event.y - lastDownY)
 
-                    // 核心逻辑：只有在 OCR 模式开启且是“点按”时才触发逻辑 (Trigger only if OCR mode is enabled and it's a click)
+                    // Trigger only if OCR mode is enabled and it's a click
                     if (isOcrEnabled && deltaX < clickTHRESHOLD && deltaY < clickTHRESHOLD) {
                         val x = event.x.toInt()
                         val y = event.y.toInt()
 
                         Log.d("MangaOcr", "检测到点按: ($x, $y)，启动切图...")
 
-                        // 调用 Manager 进行切图测试
                         ocrManager.processCrop(x, y)
                     }
                 }
             }
 
-            // 【关键逻辑修改】
-            // 如果 OCR 模式已开启且处于章节页面，返回 true 拦截所有触摸事件 (Consumes events to block WebView interaction)
-            // 这样用户在 OCR 模式下无法通过滑动或点击进行翻页。
-            // 否则返回 false，让 WebView 正常处理交互。
+            // Consumes events to block WebView interaction in OCR mode
             if (isOcrEnabled && isChapterPage) {
                 true
             } else {
@@ -430,9 +419,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    /**
-     * 执行 Suwayomi 服务器验证逻辑 (Execute Suwayomi server verification logic)
-     */
+
     private fun performSuwayomiVerification(view: WebView?, callback: (Boolean) -> Unit) {
         val js = """
             (function() {
@@ -522,10 +509,9 @@ class MainActivity : AppCompatActivity() {
         val editUrl = view.findViewById<EditText>(R.id.editUrl)
         val editUser = view.findViewById<EditText>(R.id.editUser)
         val editPass = view.findViewById<EditText>(R.id.editPass)
-        val btnTestUrl = view.findViewById<View>(R.id.btnTestUrl) // 获取测试按钮 (Get test button)
+        val btnTestUrl = view.findViewById<View>(R.id.btnTestUrl)
 
         val savedUrl = prefs.getString("url", "")
-        // 修改：初始不强制填充协议，保持整洁 (Keep input clean, don't force prefix)
         editUrl.setText(savedUrl)
         editUser.setText(prefs.getString("user", ""))
         editPass.setText(prefs.getString("pass", ""))
@@ -537,18 +523,29 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            // 自动纠错：替换中文冒号 (Sanitize: Replace Chinese colon)
             if (rawInput.contains("：")) {
                 rawInput = rawInput.replace("：", ":")
                 editUrl.setText(rawInput)
             }
+
+            val user = editUser.text.toString().trim()
+            val pass = editPass.text.toString().trim()
 
             Toast.makeText(this, "正在测试连接...", Toast.LENGTH_SHORT).show()
 
             fun performTest(baseUrl: String, fallbackToHttps: Boolean) {
                 try {
                     val client = OkHttpClient()
-                    val request = Request.Builder().url(baseUrl).build()
+                    val requestBuilder = Request.Builder().url(baseUrl)
+                    
+                    // Add Basic Auth if credentials provided
+                    if (user.isNotEmpty() && pass.isNotEmpty()) {
+                        val auth = "$user:$pass"
+                        val base64Auth = Base64.encodeToString(auth.toByteArray(), Base64.NO_WRAP)
+                        requestBuilder.addHeader("Authorization", "Basic $base64Auth")
+                    }
+                    
+                    val request = requestBuilder.build()
 
                     client.newCall(request).enqueue(object : Callback {
                         override fun onFailure(call: Call, e: IOException) {
@@ -562,12 +559,24 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         override fun onResponse(call: Call, response: Response) {
-                            // Suwayomi 即使没验证也会返回 401，这说明服务器是连通的 (Reachable even if 401)
-                            val isReachable = response.isSuccessful || response.code == 401
+                            val isAuthError = response.code == 401
+                            val isReachable = response.isSuccessful || isAuthError
+                            val body = try { response.body?.string() ?: "" } catch (e: Exception) { "" }
+
+                            val hasMarker = body.contains("<<suwayomi-subpath-injection>>")
+                            val hasTitle = body.contains("<title>Suwayomi")
+                            val hasMeta = body.contains("apple-mobile-web-app-title") && body.contains("Suwayomi")
+                            val isSuwayomi = hasMarker || hasTitle || hasMeta
+
                             runOnUiThread {
                                 if (isReachable) {
                                     editUrl.setText(baseUrl)
-                                    Toast.makeText(this@MainActivity, "连接成功！", Toast.LENGTH_SHORT).show()
+                                    val msg = when {
+                                        isAuthError -> "连接成功，但账号密码错误"
+                                        isSuwayomi -> "连接成功：已识别 Suwayomi 服务"
+                                        else -> "连接成功，但未识别到 Suwayomi 特征"
+                                    }
+                                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
                                 } else {
                                     if (fallbackToHttps) {
                                         performTest("https://$rawInput", false)
@@ -600,7 +609,7 @@ class MainActivity : AppCompatActivity() {
             .setNeutralButton("更多设置") { _, _ ->
                 showMoreSettingsDialog()
             }
-            .setPositiveButton("保存并进入", null) // 设为 null，后面通过 setOnClickListener 重写以防止自动关闭
+            .setPositiveButton("保存并进入", null)
             .setNegativeButton("退出应用") { _, _ ->
                 finish()
             }
@@ -608,7 +617,6 @@ class MainActivity : AppCompatActivity() {
 
         dialog.show()
 
-        // 在 show() 之后获取按钮并设置逻辑，这样可以控制对话框不自动关闭 (Get buttons after show() to control dismissal manually)
         val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
         val negativeButton = dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
         val neutralButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
@@ -623,45 +631,34 @@ class MainActivity : AppCompatActivity() {
             val pass = editPass.text.toString().trim()
 
             if (url.isEmpty()) {
-                // 当 URL 为空时提示，并不关闭对话框 (Toast if URL empty, keep dialog open)
                 Toast.makeText(this, "请输入服务器地址", Toast.LENGTH_SHORT).show()
             } else {
-                // 核心修改：优先尝试 https，这是目前网页访问的标准 (Prioritize https by default)
                 if (!url.contains("://")) {
                     url = "https://$url"
                 }
 
-                // 获取原先储存的信息以进行比对 (Get previously stored info for comparison)
                 val oldUrl = prefs.getString("url", "")
                 val oldUser = prefs.getString("user", "")
                 val oldPass = prefs.getString("pass", "")
 
-                // 核心修改：增加例外，若原先 URL 为空（首次配置），不视为“变更”触发重启逻辑 (Exception: If oldUrl is empty, don't trigger restart logic)
                 val isChanged = !oldUrl.isNullOrEmpty() && (url != oldUrl || user != oldUser || pass != oldPass)
 
                 if (isChanged) {
-                    // 核心逻辑：如果配置发生变更，放弃尝试立即生效，转而冻结界面并提示用户彻底重启 (Freeze UI and prompt restart if info changed)
-                    // 这应对 WebView 内存缓存顽疾的最稳妥策略。
-
-                    // 1. 立即保存新配置到存储 (Save new config immediately)
                     prefs.edit {
                         putString("url", url)
                         putString("user", user)
                         putString("pass", pass)
                     }
 
-                    // 2. 彻底切断当前连接并冻结界面 (Sever current connection and freeze UI)
                     webView.stopLoading()
                     webView.visibility = View.GONE
                     swipeRefresh.isEnabled = false
 
-                    // 3. 弹出无法取消的提示框以冻结操作 (Show non-dismissible prompt to freeze operations)
                     val restartDialog = AlertDialog.Builder(this@MainActivity)
                         .setTitle("配置已更新")
                         .setMessage("应用即将退出，请手动重启！")
-                        .setCancelable(false) // 禁用取消，强制用户看到提示 (Force user to see the prompt)
+                        .setCancelable(false)
                         .setPositiveButton("好，我知道了") { _, _ ->
-                            // 核心修改：在确认重启后才执行基础清理 (Perform basic clear only after user confirmation)
                             WebViewDatabase.getInstance(this@MainActivity).clearHttpAuthUsernamePassword()
                             CookieManager.getInstance().removeAllCookies(null)
                             CookieManager.getInstance().flush()
@@ -669,42 +666,32 @@ class MainActivity : AppCompatActivity() {
                             webView.clearCache(true)
                             webView.clearHistory()
 
-                            // 退出 Activity 组并杀死进程 (Exit activity affinity and kill process)
                             finishAffinity()
                             android.os.Process.killProcess(android.os.Process.myPid())
                         }
                         .setNegativeButton("不，我手滑了") { _, _ ->
-                            // 核心修改：恢复旧配置并恢复界面 (Restore old config and UI)
                             prefs.edit {
                                 putString("url", oldUrl)
                                 putString("user", oldUser)
                                 putString("pass", oldPass)
                             }
                             webView.visibility = View.VISIBLE
-
-                            // 恢复刷新状态：根据旧 URL 逻辑同步 (Sync refresh state)
                             val isChapterPage = oldUrl.contains("chapter")
                             swipeRefresh.isEnabled = !isChapterPage
-
-                            // 重新加载原 URL (Reload original URL)
                             webView.loadUrl(oldUrl)
                         }
                         .show()
 
-                    // 定制按钮颜色
                     restartDialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
                     restartDialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
 
-                    // 关闭配置对话框 (Dismiss config dialog)
                     dialog.dismiss()
                 } else {
-                    // 核心修改：在此处也执行保存，确保首次配置或无变更加载时，信息也能被持久化 (Ensure persistence on first-time config)
                     prefs.edit {
                         putString("url", url)
                         putString("user", user)
                         putString("pass", pass)
                     }
-                    // 如果信息没有变化或为首次配置，正常执行加载
                     webView.loadUrl(url)
                     dialog.dismiss()
                 }
@@ -715,10 +702,9 @@ class MainActivity : AppCompatActivity() {
     private fun showMoreSettingsDialog() {
         val view = LayoutInflater.from(this).inflate(R.layout.more_settings, null)
         val checkVolumePaging = view.findViewById<SwitchCompat>(R.id.checkVolumePaging)
-        val editOcrUrl = view.findViewById<EditText>(R.id.editOcrUrl) // 新增 OCR 地址填写框 (Add OCR URL edit field)
-        val btnTestOcr = view.findViewById<View>(R.id.btnTestOcr) // 新增测试连接按钮 (Add Test Connection button)
+        val editOcrUrl = view.findViewById<EditText>(R.id.editOcrUrl)
+        val btnTestOcr = view.findViewById<View>(R.id.btnTestOcr)
 
-        // 加载当前保存的状态 (Load saved states)
         checkVolumePaging.isChecked = prefs.getBoolean("volume_paging", true)
         editOcrUrl.setText(prefs.getString("ocr_server_url", "http://192.168.137.1:12233/ocr"))
 
@@ -729,28 +715,35 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            // 核心修复：将中文冒号替换为英文冒号，防止 OkHttp 因无法解析非法字符而崩溃
-            // (Sanitize: Replace Chinese colon with English colon to prevent OkHttp crash)
             if (rawInput.contains("：")) {
                 rawInput = rawInput.replace("：", ":")
-                editOcrUrl.setText(rawInput) // 同步到 UI 提升用户体验
+                editOcrUrl.setText(rawInput)
             }
+
+            // Use main credentials for OCR test as well
+            val user = prefs.getString("user", "") ?: ""
+            val pass = prefs.getString("pass", "") ?: ""
 
             Toast.makeText(this, "正在测试连接...", Toast.LENGTH_SHORT).show()
 
-            // 定义内部测试函数，支持协议回退逻辑 (Internal test function with protocol fallback)
             fun performTest(baseUrl: String, fallbackToHttps: Boolean) {
-                // 构建测试地址：MangaOcrManager 实际访问的是 /ocr 路径 (MangaOcrManager hits /ocr)
                 val testUrl = if (baseUrl.endsWith("/")) "${baseUrl}ocr" else "$baseUrl/ocr"
                 
                 try {
                     val client = OkHttpClient()
-                    val request = Request.Builder().url(testUrl).build()
+                    val requestBuilder = Request.Builder().url(testUrl)
+                    
+                    if (user.isNotEmpty() && pass.isNotEmpty()) {
+                        val auth = "$user:$pass"
+                        val base64Auth = Base64.encodeToString(auth.toByteArray(), Base64.NO_WRAP)
+                        requestBuilder.addHeader("Authorization", "Basic $base64Auth")
+                    }
+                    
+                    val request = requestBuilder.build()
 
                     client.newCall(request).enqueue(object : Callback {
                         override fun onFailure(call: Call, e: IOException) {
                             if (fallbackToHttps) {
-                                // HTTP 失败，尝试自动回退到 HTTPS (HTTP failed, try fallback to HTTPS)
                                 runOnUiThread { performTest("https://$rawInput", false) }
                             } else {
                                 runOnUiThread {
@@ -760,13 +753,24 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         override fun onResponse(call: Call, response: Response) {
-                            // 如果是 200 或 405 (Method Not Allowed) 都说明连通了
-                            val isSuccess = response.isSuccessful || response.code == 405
+                            val isAuthError = response.code == 401
+                            val isSuccess = response.isSuccessful || response.code == 405 || isAuthError
+                            val body = try { response.body?.string() ?: "" } catch (e: Exception) { "" }
+
+                            val hasMarker = body.contains("<<suwayomi-subpath-injection>>")
+                            val hasTitle = body.contains("<title>Suwayomi")
+                            val hasMeta = body.contains("apple-mobile-web-app-title") && body.contains("Suwayomi")
+                            val isSuwayomi = hasMarker || hasTitle || hasMeta
+
                             runOnUiThread {
                                 if (isSuccess) {
-                                    // 核心修改：测试成功后，将补全后的协议 URL 填回输入框 (Fill back the completed URL to EditText on success)
                                     editOcrUrl.setText(baseUrl)
-                                    Toast.makeText(this@MainActivity, "连接成功！", Toast.LENGTH_SHORT).show()
+                                    val msg = when {
+                                        isAuthError -> "连接成功，但账号密码错误"
+                                        isSuwayomi -> "连接成功：已识别 Suwayomi 服务"
+                                        else -> "连接成功！"
+                                    }
+                                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
                                 } else {
                                     if (fallbackToHttps) {
                                         performTest("https://$rawInput", false)
@@ -779,15 +783,12 @@ class MainActivity : AppCompatActivity() {
                         }
                     })
                 } catch (_: Exception) {
-                    // 核心修改：捕获非法 URL 导致的异常，避免应用崩溃 (Catch exceptions from malformed URLs)
                     runOnUiThread {
                         Toast.makeText(this@MainActivity, "URL 格式无效，请检查符号", Toast.LENGTH_LONG).show()
                     }
                 }
             }
 
-            // 初始逻辑：判断是否带协议。如果不带，默认先试 http，失败后试 https。
-            // (Initial logic: Check if protocol exists. If not, try http then https)
             if (!rawInput.startsWith("http://") && !rawInput.startsWith("https://")) {
                 performTest("http://$rawInput", true)
             } else {
@@ -800,7 +801,7 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("确定") { _, _ ->
                 prefs.edit {
                     putBoolean("volume_paging", checkVolumePaging.isChecked)
-                    putString("ocr_server_url", editOcrUrl.text.toString().trim()) // 保存 OCR 地址 (Save OCR URL)
+                    putString("ocr_server_url", editOcrUrl.text.toString().trim())
                 }
             }
             .setNegativeButton("取消", null)
@@ -808,18 +809,13 @@ class MainActivity : AppCompatActivity() {
 
         dialog.show()
 
-        // 定制按钮颜色
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // 核心用意：通过音量键实现翻页，并配合 flashView 动画掩盖翻页时的视觉突变 (Use volume keys for paging with flash animation)
-
-        // 优化 1：仅在章节阅读页面拦截音量键，普通页面（如设置、书架）保留系统音量控制
         val isChapterPage = webView.url?.contains("chapter") == true
         if (isChapterPage && (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)) {
-            // 启用长按追踪 (Enable tracking for long press)
             event?.startTracking()
             return true
         }
@@ -832,14 +828,11 @@ class MainActivity : AppCompatActivity() {
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_DOWN -> {
                     isLongPressHandled = true
-                    // 这里可以实现长按音量下的功能，例如直接跳转到下一章
-                    // (Handle long press volume down, e.g., skip to next chapter)
                     Toast.makeText(this, "长按音量下：此快捷键暂留", Toast.LENGTH_SHORT).show()
                     return true
                 }
                 KeyEvent.KEYCODE_VOLUME_UP -> {
                     isLongPressHandled = true
-                    // 核心修改：长按音量上切换 OCR 模式状态 (Toggle OCR mode on volume up long press)
                     isOcrEnabled = !isOcrEnabled
                     val statusText = if (isOcrEnabled) "OCR 模式已开启" else "OCR 模式已关闭"
                     Toast.makeText(this, statusText, Toast.LENGTH_SHORT).show()
@@ -853,20 +846,15 @@ class MainActivity : AppCompatActivity() {
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
         val isChapterPage = webView.url?.contains("chapter") == true
         if (isChapterPage && (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)) {
-            // 如果本次点击没有被长按逻辑处理，则执行短按翻页
-            // (If not handled by long press, execute short press paging)
             if (!isLongPressHandled) {
                 handleShortPressPaging(keyCode)
             }
-            isLongPressHandled = false // 重置标记 (Reset flag)
+            isLongPressHandled = false
             return true
         }
         return super.onKeyUp(keyCode, event)
     }
 
-    /**
-     * 处理短按翻页逻辑 (Handle short press paging logic)
-     */
     private fun handleShortPressPaging(keyCode: Int) {
         val volumePagingEnabled = prefs.getBoolean("volume_paging", true)
         val switchDelay = if (volumePagingEnabled) 100L else 0L
@@ -917,11 +905,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun hideSystemUI(targetUrl: String? = null) {
         val currentUrl = targetUrl ?: (if (::webView.isInitialized) webView.url else null)
-        // 增加判空保护 (Add null protection)
         val isChapterPage = !currentUrl.isNullOrEmpty() && currentUrl.contains("chapter")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // 核心修复：只有进入章节页面才进入沉浸全屏模式。普通页面应保持状态栏可见且不被覆盖。
             window.setDecorFitsSystemWindows(!isChapterPage)
             window.insetsController?.let { controller ->
                 if (isChapterPage) {
@@ -929,8 +915,6 @@ class MainActivity : AppCompatActivity() {
                     controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 } else {
                     controller.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                    // 核心修改：在黑色背景下，我们需要“浅色/白色”图标，所以 appearance 参数应为 0
-                    // (Ensure light icons for the black status bar background on Android 11+)
                     controller.setSystemBarsAppearance(0, WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS)
                 }
             }
@@ -944,19 +928,13 @@ class MainActivity : AppCompatActivity() {
                         or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         or View.SYSTEM_UI_FLAG_FULLSCREEN)
             } else {
-                // 普通页面清除全屏和隐藏导航栏的 Flag (Clear flags for normal pages)
                 window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-
-                // 针对 Android 6.0+，清除 LIGHT_STATUS_BAR 确保图标在黑色背景下是白色的
-                // (For Android M+, ensure icons are light to contrast with BLACK background)
                 var flags = window.decorView.systemUiVisibility
                 flags = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
                 window.decorView.systemUiVisibility = flags
             }
         }
 
-        // 核心修改：简化状态栏颜色 (Simplified status bar color)
-        // 非章节页直接使用黑色 Color.BLACK，章节页保持透明以支持沉浸模式
         window.statusBarColor = if (isChapterPage) {
             Color.TRANSPARENT
         } else {
