@@ -396,17 +396,42 @@ class MainActivity : AppCompatActivity() {
                     lastDownY = event.y
                 }
                 MotionEvent.ACTION_UP -> {
-                    val deltaX = abs(event.x - lastDownX)
-                    val deltaY = abs(event.y - lastDownY)
+                    val deltaX = event.x - lastDownX
+                    val deltaY = event.y - lastDownY
+                    val absDeltaX = abs(deltaX)
+                    val absDeltaY = abs(deltaY)
+
+                    // 核心逻辑：在章节页面检测下滑手势切换 OCR 模式 (Swipe down to toggle OCR mode in chapter)
+                    // 设定阈值为 200 像素，且垂直偏移明显大于水平偏移 (Threshold 200px, vertical swipe)
+                    if (isChapterPage && deltaY > 200 && absDeltaY > absDeltaX * 1.5) {
+                        isOcrEnabled = !isOcrEnabled
+                        val statusText = if (isOcrEnabled) "OCR 模式已开启" else "OCR 模式已关闭"
+                        Toast.makeText(this, statusText, Toast.LENGTH_SHORT).show()
+                        return@setOnTouchListener true
+                    }
+
+                    // 新增逻辑：在章节页面检测左右滑动手势映射为方向键翻页 (Swipe left/right to map directional keys for paging)
+                    // 设定水平滑动阈值为 150 像素，且水平偏移明显大于垂直偏移 (Threshold 150px, horizontal swipe)
+                    if (isChapterPage && !isOcrEnabled && absDeltaX > 150 && absDeltaX > absDeltaY * 1.5) {
+                        if (deltaX > 0) {
+                            // 右滑：映射为左方向键 (Right swipe -> Left Key, usually previous page)
+                            simulateKey("ArrowLeft", 37)
+                        } else {
+                            // 左滑：映射为右方向键 (Left swipe -> Right Key, usually next page)
+                            simulateKey("ArrowRight", 39)
+                        }
+                        return@setOnTouchListener true
+                    }
 
                     // Trigger only if OCR mode is enabled and it's a click
-                    if (isOcrEnabled && deltaX < clickTHRESHOLD && deltaY < clickTHRESHOLD) {
+                    if (isOcrEnabled && absDeltaX < clickTHRESHOLD && absDeltaY < clickTHRESHOLD) {
                         val x = event.x.toInt()
                         val y = event.y.toInt()
 
                         Log.d("MangaOcr", "检测到点按: ($x, $y)，启动切图...")
 
                         ocrManager.processCrop(x, y)
+                        return@setOnTouchListener true
                     }
                 }
             }
