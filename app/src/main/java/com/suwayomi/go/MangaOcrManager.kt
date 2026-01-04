@@ -100,7 +100,7 @@ class MangaOcrManager(private val webView: WebView) {
         // 读取 WebView 的 Title 并提取漫画名称 (Read WebView title and extract manga name)
         // 取 ": Chapter" 之前的所有字符 (Get all characters before ": Chapter")
         val fullTitle = webView.title ?: ""
-        val mangaName = fullTitle.substringBefore(": Chapter")
+        val mangaName = fullTitle.substringBefore(" - Suwayomi")
         Log.d("MangaOcr", mangaName)
 
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
