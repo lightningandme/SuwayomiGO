@@ -61,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var loadingView: ImageView
     private lateinit var flashView: View
+    private lateinit var ocrIndicator: View
     private lateinit var prefs: SharedPreferences
     private var isAutoProtocolFallback = false
     // 标记位：用于区分长按是否已被处理 (Flag to track if long press was handled)
@@ -84,6 +85,7 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh = findViewById(R.id.swipeRefresh)
         loadingView = findViewById(R.id.loadingProgress)
         flashView = findViewById(R.id.flashView)
+        ocrIndicator = findViewById(R.id.ocrIndicator)
 
         // 初始化 OCR 管理类
         ocrManager = MangaOcrManager(webView)
@@ -105,6 +107,11 @@ class MainActivity : AppCompatActivity() {
 
             webView.loadUrl(savedUrl)
         }
+    }
+
+    private fun setOcrEnabled(enabled: Boolean) {
+        isOcrEnabled = enabled
+        ocrIndicator.isVisible = enabled
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -213,7 +220,7 @@ class MainActivity : AppCompatActivity() {
 
                 // 核心逻辑：退出章节页面时自动关闭 OCR 监听状态 (Automatically disable OCR mode when leaving chapter)
                 if (!isChapterPage) {
-                    isOcrEnabled = false
+                    setOcrEnabled(false)
                 }
 
                 // 核心逻辑：页面刷新（或开始加载新页面）时触发动画并隐藏内容
@@ -311,7 +318,7 @@ class MainActivity : AppCompatActivity() {
                 // 核心逻辑：退出章节页面时自动关闭 OCR 监听状态 (适用于单页应用路由跳转)
                 // (Automatically disable OCR mode when leaving chapter - for SPA navigation)
                 if (!isChapterPage) {
-                    isOcrEnabled = false
+                    setOcrEnabled(false)
                 }
             }
 
@@ -404,7 +411,7 @@ class MainActivity : AppCompatActivity() {
                     // 核心逻辑：在章节页面检测下滑手势切换 OCR 模式 (Swipe down to toggle OCR mode in chapter)
                     // 设定阈值为 400 像素，且垂直偏移明显大于水平偏移 (Threshold 200px, vertical swipe)
                     if (isChapterPage && deltaY > 400 && absDeltaY > absDeltaX * 1.5) {
-                        isOcrEnabled = !isOcrEnabled
+                        setOcrEnabled(!isOcrEnabled)
                         val statusText = if (isOcrEnabled) "OCR 模式已开启" else "OCR 模式已关闭"
                         Toast.makeText(this, statusText, Toast.LENGTH_SHORT).show()
                         return@setOnTouchListener true
@@ -858,7 +865,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 KeyEvent.KEYCODE_VOLUME_UP -> {
                     isLongPressHandled = true
-                    isOcrEnabled = !isOcrEnabled
+                    setOcrEnabled(!isOcrEnabled)
                     val statusText = if (isOcrEnabled) "OCR 模式已开启" else "OCR 模式已关闭"
                     Toast.makeText(this, statusText, Toast.LENGTH_SHORT).show()
                     return true
