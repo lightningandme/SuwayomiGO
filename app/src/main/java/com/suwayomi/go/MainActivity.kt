@@ -413,7 +413,7 @@ class MainActivity : AppCompatActivity() {
                     if (isChapterPage && deltaY > 400 && absDeltaY > absDeltaX * 1.5) {
                         setOcrEnabled(!isOcrEnabled)
                         val statusText = if (isOcrEnabled) "OCR 模式已开启" else "OCR 模式已关闭"
-                        Toast.makeText(this, statusText, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, statusText, Toast.LENGTH_LONG).show()
                         return@setOnTouchListener true
                     }
 
@@ -593,7 +593,7 @@ class MainActivity : AppCompatActivity() {
                         override fun onResponse(call: Call, response: Response) {
                             val isAuthError = response.code == 401
                             val isReachable = response.isSuccessful || isAuthError
-                            val body = try { response.body?.string() ?: "" } catch (e: Exception) { "" }
+                            val body = try { response.body?.string() ?: "" } catch (_: Exception) { "" }
 
                             val hasMarker = body.contains("<<suwayomi-subpath-injection>>")
                             val hasTitle = body.contains("<title>Suwayomi")
@@ -787,7 +787,7 @@ class MainActivity : AppCompatActivity() {
                         override fun onResponse(call: Call, response: Response) {
                             val isAuthError = response.code == 401
                             val isSuccess = response.isSuccessful || response.code == 405 || isAuthError
-                            val body = try { response.body?.string() ?: "" } catch (e: Exception) { "" }
+                            val body = try { response.body?.string() ?: "" } catch (_: Exception) { "" }
 
                             val hasMarker = body.contains("<<suwayomi-subpath-injection>>")
                             val hasTitle = body.contains("<title>Suwayomi")
@@ -867,7 +867,7 @@ class MainActivity : AppCompatActivity() {
                     isLongPressHandled = true
                     setOcrEnabled(!isOcrEnabled)
                     val statusText = if (isOcrEnabled) "OCR 模式已开启" else "OCR 模式已关闭"
-                    Toast.makeText(this, statusText, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, statusText, Toast.LENGTH_LONG).show()
                     return true
                 }
             }
