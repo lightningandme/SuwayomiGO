@@ -740,7 +740,7 @@ class MainActivity : AppCompatActivity() {
         val btnTestOcr = view.findViewById<View>(R.id.btnTestOcr)
 
         checkVolumePaging.isChecked = prefs.getBoolean("volume_paging", true)
-        editOcrUrl.setText(prefs.getString("ocr_server_url", "http://192.168.137.1:12233/ocr"))
+        editOcrUrl.setText(prefs.getString("ocr_server_url", ""))
 
         btnTestOcr.setOnClickListener {
             var rawInput = editOcrUrl.text.toString().trim()

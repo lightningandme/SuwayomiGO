@@ -77,6 +77,7 @@ class MangaOcrManager(private val webView: WebView) {
         widthPixels.coerceAtMost(heightPixels) * 0.8
     }).toInt()
     private val client = OkHttpClient()
+    private var lastRequestTime: Long = 0
 
     /**
      * 常规点按识别 (Regular click recognition)
@@ -188,6 +189,14 @@ class MangaOcrManager(private val webView: WebView) {
     }
 
     private fun sendToOcrServer(base64Image: String, relX: Int, relY: Int, absClickY: Int) {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastRequestTime < 3000) {
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(webView.context, "请求过快，稍后再试", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
         val fullTitle = webView.title ?: ""
         val mangaName = fullTitle.substringBefore(" - Suwayomi")
 
@@ -212,6 +221,8 @@ class MangaOcrManager(private val webView: WebView) {
         val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
         
         try {
+            lastRequestTime = currentTime
+
             val request = Request.Builder().url(ocrUrl).post(body).build()
             client.newCall(request).enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {

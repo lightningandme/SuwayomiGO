@@ -48,7 +48,7 @@
                 android:id="@+id/text_translation"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="正在翻译..."
+                android:text="正在发送..."
                 android:textColor="#1A1A1A"
                 android:textSize="17sp"
                 android:textStyle="bold"
@@ -59,7 +59,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="识别内容"
+                android:text="等待识别..."
                 android:textColor="#757575"
                 android:textSize="13sp"
                 android:lineSpacingExtra="2dp" />
