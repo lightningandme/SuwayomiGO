@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.PointF
+import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
@@ -30,6 +32,7 @@ import okhttp3.Response
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import kotlin.math.hypot
 
 /**
  * 专门处理漫画 OCR 逻辑的管理类 (Management class for Manga OCR logic)
@@ -75,6 +78,9 @@ class MangaOcrManager(private val webView: WebView) {
     }).toInt()
     private val client = OkHttpClient()
 
+    /**
+     * 常规点按识别 (Regular click recognition)
+     */
     fun processCrop(clickX: Int, clickY: Int) {
         if (webView.width <= 0 || webView.height <= 0) return
 
@@ -96,12 +102,94 @@ class MangaOcrManager(private val webView: WebView) {
         sendToOcrServer(base64String, relX, relY, clickY)
     }
 
+    /**
+     * 处理触摸点序列，识别是点击还是闭合圈 (Process touch points, identify loop or click)
+     */
+    fun processTouchPoints(points: List<PointF>): Boolean {
+        if (points.isEmpty()) return false
+
+        // 优先识别闭合圈 (Prioritize identifying closed loop)
+        if (isClosedLoop(points)) {
+            val rect = getBoundingBox(points)
+            // 确保圈定的范围不是太小 (Ensure the area is not too small)
+            if (rect.width() > 10 && rect.height() > 10) {
+                Log.d("MangaOcr", "识别到闭合圈，范围: $rect")
+                processRectCrop(rect)
+                return true
+            }
+        }
+
+        // 识别点击 (Identify click)
+        val start = points.first()
+        val end = points.last()
+        val dist = hypot(start.x - end.x, start.y - end.y)
+        if (dist < 20) { // 20 像素以内的位移视为点击 (Displacement within 20px treated as click)
+            Log.d("MangaOcr", "检测到点按: (${start.x}, ${start.y})，启动常规切图...")
+            processCrop(start.x.toInt(), start.y.toInt())
+            return true
+        }
+
+        return false
+    }
+
+    private fun isClosedLoop(points: List<PointF>): Boolean {
+        if (points.size < 10) return false
+        val start = points.first()
+        val end = points.last()
+        val dist = hypot(start.x - end.x, start.y - end.y)
+
+        // 计算路径总长度 (Calculate total path length)
+        var pathLength = 0f
+        for (i in 0 until points.size - 1) {
+            pathLength += hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y)
+        }
+
+        val density = webView.context.resources.displayMetrics.density
+        // 启发式判断：起点和终点足够接近，且路径长度明显大于起终点距离且达到一定长度
+        // (Heuristic: start/end close enough, path length significantly longer than dist and exceeds threshold)
+        return dist < 40 * density && pathLength > 100 * density && pathLength > dist * 2
+    }
+
+    private fun getBoundingBox(points: List<PointF>): RectF {
+        var minX = Float.MAX_VALUE
+        var minY = Float.MAX_VALUE
+        var maxX = Float.MIN_VALUE
+        var maxY = Float.MIN_VALUE
+        for (p in points) {
+            if (p.x < minX) minX = p.x
+            if (p.y < minY) minY = p.y
+            if (p.x > maxX) maxX = p.x
+            if (p.y > maxY) maxY = p.y
+        }
+        return RectF(minX, minY, maxX, maxY)
+    }
+
+    private fun processRectCrop(rect: RectF) {
+        if (webView.width <= 0 || webView.height <= 0) return
+
+        val fullBitmap = createBitmap(webView.width, webView.height)
+        val canvas = Canvas(fullBitmap)
+        webView.draw(canvas)
+
+        val left = rect.left.toInt().coerceIn(0, webView.width - 1)
+        val top = rect.top.toInt().coerceIn(0, webView.height - 1)
+        val right = rect.right.toInt().coerceIn(left + 1, webView.width)
+        val bottom = rect.bottom.toInt().coerceIn(top + 1, webView.height)
+
+        val width = right - left
+        val height = bottom - top
+
+        val cropped = Bitmap.createBitmap(fullBitmap, left, top, width, height)
+        val base64String = bitmapToBase64(cropped)
+
+        val clickY = (top + bottom) / 2
+        // 根据需求：relX, relY 均为 0，clickY 为矩形中心 Y 坐标 (relX, relY are 0, clickY is center Y)
+        sendToOcrServer(base64String, 0, 0, clickY)
+    }
+
     private fun sendToOcrServer(base64Image: String, relX: Int, relY: Int, absClickY: Int) {
-        // 读取 WebView 的 Title 并提取漫画名称 (Read WebView title and extract manga name)
-        // 取 ": Chapter" 之前的所有字符 (Get all characters before ": Chapter")
         val fullTitle = webView.title ?: ""
         val mangaName = fullTitle.substringBefore(" - Suwayomi")
-        Log.d("MangaOcr", mangaName)
 
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
         val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
@@ -118,7 +206,7 @@ class MangaOcrManager(private val webView: WebView) {
             put("image", base64Image)
             put("x", relX)
             put("y", relY)
-            put("mangaName", mangaName) // 将提取的漫画名称加入请求字段 (Add extracted manga name to request)
+            put("mangaName", mangaName)
         }.toString()
 
         val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -160,18 +248,13 @@ class MangaOcrManager(private val webView: WebView) {
         Handler(Looper.getMainLooper()).post {
             val context = webView.context
             
-            // --- 彻底拦截：通过匿名类重写 dispatchKeyEvent (Full interception via override) ---
             val dialog = object : android.app.Dialog(context) {
                 override fun dispatchKeyEvent(event: KeyEvent): Boolean {
                     val keyCode = event.keyCode
-                    // 拦截音量上键和下键，防止在弹窗显示时触发翻页 (Intercept Volume keys to prevent paging)
                     if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-                        // 核心修复：如果在 ACTION_DOWN 时就 dismiss，随后的 ACTION_UP 事件会因弹窗消失而传递给 Activity，
-                        // 从而触发 Activity 中的翻页逻辑。因此我们改为在 ACTION_UP 时才执行 dismiss。
                         if (keyCode == KeyEvent.KEYCODE_VOLUME_UP && event.action == KeyEvent.ACTION_UP) {
                             this.dismiss()
                         }
-                        // 关键：无论按下还是抬起，都返回 true，表示该事件被“吞掉”了，不会传给底层组件
                         return true 
                     }
                     return super.dispatchKeyEvent(event)
@@ -220,7 +303,6 @@ class MangaOcrManager(private val webView: WebView) {
                 })
             }
 
-            // --- 核心逻辑：预先测量并禁用动画 (Core logic: pre-measure and disable animation) ---
             val displayMetrics = context.resources.displayMetrics
             val screenHeight = displayMetrics.heightPixels
             val screenWidth = displayMetrics.widthPixels
@@ -241,14 +323,12 @@ class MangaOcrManager(private val webView: WebView) {
                 window.decorView.setPadding(0, 0, 0, 0)
 
                 val params = window.attributes
-                // 强制设为自适应宽高，方便自由拖动 (Set to wrap_content for free dragging)
                 params.width = WindowManager.LayoutParams.WRAP_CONTENT
                 params.height = WindowManager.LayoutParams.WRAP_CONTENT
                 params.gravity = android.view.Gravity.TOP or android.view.Gravity.START
 
                 val safeZone = screenWidth.coerceAtMost(screenHeight) / 8
 
-                // 初始定位 (Initial Positioning)
                 if (absClickY - safeZone - actualDialogHeight > 0) {
                     params.y = absClickY - safeZone - actualDialogHeight
                 } else if (absClickY + safeZone + actualDialogHeight < screenHeight) {
@@ -265,8 +345,6 @@ class MangaOcrManager(private val webView: WebView) {
                 params.x = (screenWidth - view.measuredWidth) / 2
                 window.attributes = params
 
-                // --- 实现手动拖动功能 (Implement manual dragging) ---
-                // 修复：通过对象封装拖动状态，解决变量被认为“未读取”的警告 (Fix: Encapsulate drag state in an object)
                 val dragState = object {
                     var x = 0f
                     var y = 0f
@@ -287,7 +365,7 @@ class MangaOcrManager(private val webView: WebView) {
                         MotionEvent.ACTION_MOVE -> {
                             params.x = (dragState.x + (event.rawX - dragState.touchX)).toInt()
                             params.y = (dragState.y + (event.rawY - dragState.touchY)).toInt()
-                            window.attributes = params // 实时更新 (Real-time update)
+                            window.attributes = params 
                             true
                         }
                         else -> false

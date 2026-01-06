@@ -7,13 +7,13 @@ import android.app.DownloadManager
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.PointF
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
-import android.util.Log
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -69,6 +69,7 @@ class MainActivity : AppCompatActivity() {
     
     // 核心修改：OCR 模式开关标记 (OCR mode toggle flag)
     private var isOcrEnabled = false
+    private val touchPoints = mutableListOf<PointF>()
 
     private lateinit var ocrManager: MangaOcrManager
 
@@ -390,7 +391,6 @@ class MainActivity : AppCompatActivity() {
 
     private var lastDownX = 0f
     private var lastDownY = 0f
-    private val clickTHRESHOLD = 10f
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupMangaOcrTouch() {
@@ -401,6 +401,15 @@ class MainActivity : AppCompatActivity() {
                 MotionEvent.ACTION_DOWN -> {
                     lastDownX = event.x
                     lastDownY = event.y
+                    if (isOcrEnabled && isChapterPage) {
+                        touchPoints.clear()
+                        touchPoints.add(PointF(event.x, event.y))
+                    }
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (isOcrEnabled && isChapterPage) {
+                        touchPoints.add(PointF(event.x, event.y))
+                    }
                 }
                 MotionEvent.ACTION_UP -> {
                     val deltaX = event.x - lastDownX
@@ -408,8 +417,7 @@ class MainActivity : AppCompatActivity() {
                     val absDeltaX = abs(deltaX)
                     val absDeltaY = abs(deltaY)
 
-                    // 核心逻辑：在章节页面检测下滑手势切换 OCR 模式 (Swipe down to toggle OCR mode in chapter)
-                    // 设定阈值为 400 像素，且垂直偏移明显大于水平偏移 (Threshold 200px, vertical swipe)
+                    // 核心逻辑：在章节页面检测下滑手势切换 OCR 模式
                     if (isChapterPage && deltaY > 400 && absDeltaY > absDeltaX * 1.5) {
                         setOcrEnabled(!isOcrEnabled)
                         val statusText = if (isOcrEnabled) "OCR 模式已开启" else "OCR 模式已关闭"
@@ -417,28 +425,22 @@ class MainActivity : AppCompatActivity() {
                         return@setOnTouchListener true
                     }
 
-                    // 新增逻辑：在章节页面检测左右滑动手势映射为方向键翻页 (Swipe left/right to map directional keys for paging)
-                    // 设定水平滑动阈值为 150 像素，且水平偏移明显大于垂直偏移 (Threshold 150px, horizontal swipe)
+                    // 检测左右滑动手势映射为方向键翻页
                     if (isChapterPage && isOcrEnabled && absDeltaX > 150 && absDeltaX > absDeltaY * 1.5) {
                         if (deltaX > 0) {
-                            // 右滑：映射为左方向键 (Right swipe -> Left Key, usually previous page)
                             simulateKey("ArrowLeft", 37)
                         } else {
-                            // 左滑：映射为右方向键 (Left swipe -> Right Key, usually next page)
                             simulateKey("ArrowRight", 39)
                         }
                         return@setOnTouchListener true
                     }
 
-                    // Trigger only if OCR mode is enabled and it's a click
-                    if (isOcrEnabled && absDeltaX < clickTHRESHOLD && absDeltaY < clickTHRESHOLD) {
-                        val x = event.x.toInt()
-                        val y = event.y.toInt()
-
-                        Log.d("MangaOcr", "检测到点按: ($x, $y)，启动切图...")
-
-                        ocrManager.processCrop(x, y)
-                        return@setOnTouchListener true
+                    // OCR 识别逻辑：优先交给 ocrManager 处理手势序列 (Identify closed loop or click)
+                    if (isChapterPage && isOcrEnabled) {
+                        touchPoints.add(PointF(event.x, event.y))
+                        if (ocrManager.processTouchPoints(touchPoints)) {
+                            return@setOnTouchListener true
+                        }
                     }
                 }
             }
