@@ -689,8 +689,8 @@ class MainActivity : AppCompatActivity() {
                     swipeRefresh.isEnabled = false
 
                     val restartDialog = AlertDialog.Builder(this@MainActivity)
-                        .setTitle("配置已更新")
-                        .setMessage("应用即将退出，请手动重启！")
+                        .setTitle("服务器配置已更改")
+                        .setMessage("确认后，应用将退出，请手动重启！")
                         .setCancelable(false)
                         .setPositiveButton("好，我知道了") { _, _ ->
                             WebViewDatabase.getInstance(this@MainActivity).clearHttpAuthUsernamePassword()
@@ -712,7 +712,6 @@ class MainActivity : AppCompatActivity() {
                             webView.visibility = View.VISIBLE
                             val isChapterPage = oldUrl.contains("chapter")
                             swipeRefresh.isEnabled = !isChapterPage
-                            webView.loadUrl(oldUrl)
                         }
                         .show()
 
@@ -839,6 +838,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             .setNegativeButton("取消", null)
+            // 核心实现：当此对话框以任何形式关闭时（确定、取消、物理返回），都重新弹出服务器配置对话框
+            // (Core implementation: When this dialog is closed in any way (OK, Cancel, Back), reappear the server config dialog)
+            .setOnDismissListener {
+                showConfigDialog()
+            }
             .create()
 
         dialog.show()
