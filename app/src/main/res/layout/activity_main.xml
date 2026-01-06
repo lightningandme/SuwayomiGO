@@ -45,11 +45,11 @@
         <!-- OCR 状态指示器：红色圆点 -->
         <View
             android:id="@+id/ocrIndicator"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
             android:layout_marginTop="24dp"
             android:layout_marginEnd="24dp"
-            android:background="@drawable/ocr_indicator_dot"
+            android:background="@drawable/ocr_gemini_dot"
             android:visibility="gone"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
