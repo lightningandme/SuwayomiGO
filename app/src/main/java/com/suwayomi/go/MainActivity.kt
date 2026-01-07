@@ -22,7 +22,6 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.view.animation.AnimationUtils
-import android.webkit.CookieManager
 import android.webkit.HttpAuthHandler
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
@@ -30,10 +29,8 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
-import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.webkit.WebViewDatabase
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.Toast
@@ -163,7 +160,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
 
-                            // 实现要求：webview加载完成，加载动画任继续运行2秒 (Keep animation for 2s after load)
+                            // 实现要求：webView加载完成，加载动画任继续运行2秒 (Keep animation for 2s after load)
                             webView.postDelayed({
                                 // 再次检查进度，防止延迟期间用户又触发了新的刷新
                                 if (webView.progress == 100) {
@@ -445,7 +442,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // Consumes events to block WebView interaction in OCR mode
+            // Consumes events to block webView interaction in OCR mode
             if (isOcrEnabled && isChapterPage) {
                 true
             } else {
@@ -545,10 +542,24 @@ class MainActivity : AppCompatActivity() {
         val editPass = view.findViewById<EditText>(R.id.editPass)
         val btnTestUrl = view.findViewById<View>(R.id.btnTestUrl)
 
-        val savedUrl = prefs.getString("url", "")
-        editUrl.setText(savedUrl)
+        val savedUrlString = prefs.getString("url", "")
+        editUrl.setText(savedUrlString)
         editUser.setText(prefs.getString("user", ""))
         editPass.setText(prefs.getString("pass", ""))
+
+        // 创建并配置对话框 (Create and configure the dialog)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("服务器配置")
+            .setView(view)
+            .setCancelable(savedUrlString.isNullOrEmpty().not())
+            .setNeutralButton("更多设置") { _, _ ->
+                showMoreSettingsDialog()
+            }
+            .setPositiveButton("进入页面", null)
+            .setNegativeButton("退出应用") { _, _ ->
+                finish()
+            }
+            .create()
 
         btnTestUrl.setOnClickListener {
             var rawInput = editUrl.text.toString().trim()
@@ -604,13 +615,26 @@ class MainActivity : AppCompatActivity() {
 
                             runOnUiThread {
                                 if (isReachable) {
-                                    editUrl.setText(baseUrl)
-                                    val msg = when {
-                                        isAuthError -> "连接成功，但账号密码错误"
-                                        isSuwayomi -> "连接成功：已识别 Suwayomi 服务"
-                                        else -> "连接成功，但未识别到 Suwayomi 特征"
+                                    // 核心微调：始终去除域名+端口之后的后缀（保留最后一个/） (Always remove suffix after domain+port, keep last /)
+                                    val cleanedUrl = if (baseUrl.indexOf("/", 8) != -1) {
+                                        baseUrl.replace(Regex("(https?://[^/]+/).*"), "$1")
+                                    } else {
+                                        "$baseUrl/"
                                     }
-                                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                                    editUrl.setText(cleanedUrl)
+                                    
+                                    if (isSuwayomi) {
+                                        // 仅执行自动保存操作，不进入网页，不关闭对话框 (Perform auto-save only)
+                                        prefs.edit {
+                                            putString("url", cleanedUrl)
+                                            putString("user", user)
+                                            putString("pass", pass)
+                                        }
+                                        Toast.makeText(this@MainActivity, "连接成功（配置已保存）", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val msg = if (isAuthError) "账号密码错误" else "未识别到 Suwayomi 服务"
+                                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                                    }
                                 } else {
                                     if (fallbackToHttps) {
                                         performTest("https://$rawInput", false)
@@ -636,19 +660,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("服务器配置")
-            .setView(view)
-            .setCancelable(savedUrl.isNullOrEmpty().not())
-            .setNeutralButton("更多设置") { _, _ ->
-                showMoreSettingsDialog()
-            }
-            .setPositiveButton("保存并进入", null)
-            .setNegativeButton("退出应用") { _, _ ->
-                finish()
-            }
-            .create()
-
         dialog.show()
 
         val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
@@ -660,72 +671,39 @@ class MainActivity : AppCompatActivity() {
         neutralButton.setTextColor("#3581b2".toColorInt())
 
         positiveButton.setOnClickListener {
-            var url = editUrl.text.toString().trim()
-            val user = editUser.text.toString().trim()
-            val pass = editPass.text.toString().trim()
+            val urlInput = editUrl.text.toString().trim()
+            val userInput = editUser.text.toString().trim()
+            val passInput = editPass.text.toString().trim()
 
-            if (url.isEmpty()) {
+            if (urlInput.isEmpty()) {
                 Toast.makeText(this, "请输入服务器地址", Toast.LENGTH_SHORT).show()
             } else {
-                if (!url.contains("://")) {
-                    url = "https://$url"
+                // 处理 URL 协议补全用于后续比较 (Handle URL protocol completion for comparison)
+                var urlToLoad = urlInput
+                if (!urlToLoad.contains("://")) {
+                    urlToLoad = "https://$urlToLoad"
                 }
 
-                val oldUrl = prefs.getString("url", "")
-                val oldUser = prefs.getString("user", "")
-                val oldPass = prefs.getString("pass", "")
+                // 获取已保存（测试通过）的配置信息 (Get saved (tested) configuration)
+                val savedUrl = prefs.getString("url", "")
+                val savedUser = prefs.getString("user", "")
+                val savedPass = prefs.getString("pass", "")
 
-                val isChanged = !oldUrl.isNullOrEmpty() && (url != oldUrl || user != oldUser || pass != oldPass)
-
-                if (isChanged) {
-                    prefs.edit {
-                        putString("url", url)
-                        putString("user", user)
-                        putString("pass", pass)
-                    }
-
-                    webView.stopLoading()
-                    webView.visibility = View.GONE
-                    swipeRefresh.isEnabled = false
-
-                    val restartDialog = AlertDialog.Builder(this@MainActivity)
-                        .setTitle("服务器配置已更改")
-                        .setMessage("确认后，应用将退出，请手动重启！")
-                        .setCancelable(false)
-                        .setPositiveButton("好，我知道了") { _, _ ->
-                            WebViewDatabase.getInstance(this@MainActivity).clearHttpAuthUsernamePassword()
-                            CookieManager.getInstance().removeAllCookies(null)
-                            CookieManager.getInstance().flush()
-                            WebStorage.getInstance().deleteAllData()
-                            webView.clearCache(true)
-                            webView.clearHistory()
-
-                            finishAffinity()
-                            android.os.Process.killProcess(android.os.Process.myPid())
-                        }
-                        .setNegativeButton("不，我手滑了") { _, _ ->
-                            prefs.edit {
-                                putString("url", oldUrl)
-                                putString("user", oldUser)
-                                putString("pass", oldPass)
-                            }
-                            webView.visibility = View.VISIBLE
-                            val isChapterPage = oldUrl.contains("chapter")
-                            swipeRefresh.isEnabled = !isChapterPage
-                        }
-                        .show()
-
-                    restartDialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor("#3581b2".toColorInt())
-                    restartDialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor("#3581b2".toColorInt())
-
-                    dialog.dismiss()
+                // 在比对前同样去除输入 URL 域名+端口后的后缀（保留最后一个/） (Remove suffix after domain+port before comparison, keep last /)
+                val cleanedUrlToLoad = if (urlToLoad.indexOf("/", 8) != -1) {
+                    urlToLoad.replace(Regex("(https?://[^/]+/).*"), "$1")
                 } else {
-                    prefs.edit {
-                        putString("url", url)
-                        putString("user", user)
-                        putString("pass", pass)
-                    }
-                    webView.loadUrl(url)
+                    "$urlToLoad/"
+                }
+
+                // 核心微调：检查当前输入是否与已测试通过的配置一致
+                // 任何未经测试通过的更改全都会被拦截并提示 (Intercept any untested changes)
+                if (cleanedUrlToLoad != savedUrl || userInput != savedUser || passInput != savedPass) {
+                    Toast.makeText(this, "配置已更改，请再次测试连接", Toast.LENGTH_SHORT).show()
+                } else {
+                    // 仅在配置匹配时执行载入页面操作
+                    // (Only perform page load when configuration matches)
+                    webView.loadUrl(urlToLoad)
                     dialog.dismiss()
                 }
             }
