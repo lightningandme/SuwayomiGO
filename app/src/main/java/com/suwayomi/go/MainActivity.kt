@@ -426,7 +426,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     // 检测左右滑动手势映射为方向键翻页
-                    if (isChapterPage && isOcrEnabled && absDeltaX > 150 && absDeltaX > absDeltaY * 1.5) {
+                    if (isChapterPage && isOcrEnabled && absDeltaX > 300 && absDeltaX > absDeltaY * 1.5) {
                         if (deltaX > 0) {
                             simulateKey("ArrowLeft", 37)
                         } else {
