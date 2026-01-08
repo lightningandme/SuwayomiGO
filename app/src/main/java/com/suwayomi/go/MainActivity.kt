@@ -150,7 +150,9 @@ class MainActivity : AppCompatActivity() {
                         if (isSuwayomi) {
                             loadingView.tag = "is_ending" // 标记正在处理结束逻辑
 
-                            // 核心修复：如果通过自动回退成功访问，将成功的 URL 保存回配置 (Save successful fallback URL to prefs)
+                            // 核心修改：已禁止自动保存跳转后的地址，确保配置始终为干净的服务器基准地址
+                            // (Auto-saving redirected URLs is disabled to keep configuration as the clean server base)
+                            /*
                             val currentUrl = view?.url
                             if (!currentUrl.isNullOrEmpty()) {
                                 val savedUrl = prefs.getString("url", "")
@@ -159,6 +161,7 @@ class MainActivity : AppCompatActivity() {
                                     prefs.edit { putString("url", currentUrl) }
                                 }
                             }
+                            */
 
                             // 实现要求：webView加载完成，加载动画任继续运行2秒 (Keep animation for 2s after load)
                             webView.postDelayed({
@@ -615,13 +618,9 @@ class MainActivity : AppCompatActivity() {
 
                             runOnUiThread {
                                 if (isReachable) {
-                                    // 核心微调：始终去除域名+端口之后的后缀（保留最后一个/） (Always remove suffix after domain+port, keep last /)
-                                    val cleanedUrl = if (baseUrl.indexOf("/", 8) != -1) {
-                                        baseUrl.replace(Regex("(https?://[^/]+/).*"), "$1")
-                                    } else {
-                                        "$baseUrl/"
-                                    }
-                                    editUrl.setText(cleanedUrl)
+                                    // 核心微调：仅确保地址以 / 结尾，禁止将处理后的地址或跳转后的地址回传给地址栏 (Ensure trailing slash and prohibit backflow to UI)
+                                    val cleanedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+                                    // editUrl.setText(cleanedUrl) // 禁止回传处理后的 URL 到 UI (Stop updating the URL in the dialog)
                                     
                                     if (isSuwayomi) {
                                         // 仅执行自动保存操作，不进入网页，不关闭对话框 (Perform auto-save only)
@@ -689,12 +688,8 @@ class MainActivity : AppCompatActivity() {
                 val savedUser = prefs.getString("user", "")
                 val savedPass = prefs.getString("pass", "")
 
-                // 在比对前同样去除输入 URL 域名+端口后的后缀（保留最后一个/） (Remove suffix after domain+port before comparison, keep last /)
-                val cleanedUrlToLoad = if (urlToLoad.indexOf("/", 8) != -1) {
-                    urlToLoad.replace(Regex("(https?://[^/]+/).*"), "$1")
-                } else {
-                    "$urlToLoad/"
-                }
+                // 在比对前确保输入地址以 / 结尾 (Ensure URL ends with / before comparison)
+                val cleanedUrlToLoad = if (urlToLoad.endsWith("/")) urlToLoad else "$urlToLoad/"
 
                 // 核心微调：检查当前输入是否与已测试通过的配置一致
                 // 任何未经测试通过的更改全都会被拦截并提示 (Intercept any untested changes)
