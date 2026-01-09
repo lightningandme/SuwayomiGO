@@ -477,29 +477,93 @@ class MangaOcrManager(private val webView: WebView) {
     }
 
     private fun exportToAnki(context: Context, word: JapaneseWord, sourceSentence: String) {
-        // AnkiDroid API 的标准 Intent Action
-        val intent = android.content.Intent("com.ichi2.anki.action.ADD_NOTE")
+        val permission = "com.ichi2.anki.permission.READ_WRITE_DATABASE"
 
-        // 自动填充字段
-        // 注意：你需要确保你的 Anki 里有对应的 Note Type，或者让用户自己在弹出的界面选
-        // 这里的 Key (front, back) 是 AnkiDroid 的通用约定，但也取决于用户设置
-        intent.putExtra("source", sourceSentence) // 来源句子作为参考
-        intent.putExtra("fields", arrayOf(
-            word.baseForm,           // 正面：单词原型
-            "${word.reading}\n\n${word.definition}\n\n例句：$sourceSentence" // 背面：读音+释义+例句
-        ))
+        // 检查 Manifest 声明是否被系统认可
+        val hasPermission = context.checkCallingOrSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
-        // 尝试启动 AnkiDroid
+        if (!hasPermission) {
+            Log.e("AnkiError", "系统权限位未激活")
+            // 尝试触发 Anki 的授权界面 (通过查询来触发安全对话框)
+            try {
+                val intent = android.content.Intent().apply {
+                    setClassName("com.ichi2.anki", "com.ichi2.anki.IntentHandler")
+                    action = android.content.Intent.ACTION_SEND
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_TEXT, "test")
+                }
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                Toast.makeText(context, "请在 Anki 弹窗中选择'总是允许'", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "请确保已安装官方版 AnkiDroid", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
+        // === 1. 构建卡片内容 (HTML 魔法) ===
+        // 我们把“单词”放在正面。
+        // 把“读音”、“释义”、“例句”通过 HTML 排版全部塞进背面。
+        // 这样无论用户用什么模板，看起来都像是一个自定义模板。
+
+        val frontContent = word.baseForm
+
+        val backContent = """
+            <div style="text-align:center; margin-bottom:15px;">
+                <span style="font-size:24px; color:#555;">${word.reading}</span>
+            </div>
+            
+            <div style="background-color:#F5F5F5; padding:10px; border-radius:5px; margin-bottom:15px; text-align:left;">
+                <b style="color:#2196F3; font-size:12px;">释义 DEFINITION</b><br>
+                <div style="font-size:16px; margin-top:5px; line-height:1.5;">${word.definition.replace("\n", "<br>")}</div>
+            </div>
+            
+            <div style="border-top:1px dashed #ddd; padding-top:10px; text-align:left;">
+                <b style="color:#FF9800; font-size:12px;">来源 CONTEXT</b><br>
+                <div style="font-style:italic; color:#666; margin-top:5px;">${sourceSentence}</div>
+            </div>
+        """.trimIndent()
+
+        // === 2. 尝试静默添加 (Silent Add) ===
         try {
-            // 加上这个 flag 以免在某些手机上报错
+            val uri = android.net.Uri.parse("content://com.ichi2.anki.flashcards/notes")
+            val values = android.content.ContentValues().apply {
+                put("deck_name", "Manga_OCR_Cards") // 自动归类到这个牌组
+                put("model_name", "Basic")          // 使用最基础的 Basic 模板 (Front/Back)
+
+                // 关键：Basic 只有两个字段，我们用 \u001f 分隔
+                put("fields", "$frontContent\u001f$backContent")
+
+                put("tags", "MangaOCR")
+            }
+
+            val resultUri = context.contentResolver.insert(uri, values)
+            if (resultUri != null) {
+                Toast.makeText(context, "✅ 已存入 Anki", Toast.LENGTH_SHORT).show()
+                return
+            }
+        } catch (e: Exception) {
+            Log.e("MangaOcr", "静默添加失败: ${e.message}", e)
+        }
+
+        // === 3. 失败后跳转 (Intent Fallback) ===
+        // 只有当静默失败时才跳出
+        try {
+            val intent = android.content.Intent().apply {
+                setClassName("com.ichi2.anki", "com.ichi2.anki.IntentHandler")
+                action = android.content.Intent.ACTION_SEND
+                type = "text/plain"
+
+                // 同样使用 HTML 拼接策略
+                val fields = arrayOf(frontContent, backContent)
+                putExtra("com.ichi2.anki.extra.FIELDS", fields)
+                putExtra("com.ichi2.anki.extra.SOURCE", "MangaOCR")
+                putExtra(android.content.Intent.EXTRA_TEXT, frontContent)
+            }
             intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
-        } catch (_: Exception) {
-            // 如果用户没装 AnkiDroid
-            Toast.makeText(context, "未找到 AnkiDroid，请先安装", Toast.LENGTH_SHORT).show()
-            // 备选方案：复制到剪贴板
-            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Anki Card", "${word.baseForm}\n${word.definition}"))
+        } catch (e: Exception) {
+            Toast.makeText(context, "启动 Anki 失败", Toast.LENGTH_SHORT).show()
         }
     }
 }
