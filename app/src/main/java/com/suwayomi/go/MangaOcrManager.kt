@@ -33,6 +33,7 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import kotlin.math.hypot
+import androidx.core.net.toUri
 
 /**
  * 专门处理漫画 OCR 逻辑的管理类 (Management class for Manga OCR logic)
@@ -41,7 +42,8 @@ data class JapaneseWord(
     val surface: String,
     val baseForm: String,
     val pos: String,
-    val reading: String
+    val reading: String,
+    val definition: String // 新增字段
 )
 
 data class OcrResponse(
@@ -54,11 +56,15 @@ data class OcrResponse(
             val json = JSONObject(jsonString)
             val wordsArray = json.getJSONArray("words")
             val wordList = mutableListOf<JapaneseWord>()
+            // 修改 OcrResponse 中的解析逻辑
             for (i in 0 until wordsArray.length()) {
                 val w = wordsArray.getJSONObject(i)
                 wordList.add(JapaneseWord(
-                    w.optString("s"), w.optString("b"),
-                    w.optString("p"), w.optString("r")
+                    w.optString("s"),
+                    w.optString("b"),
+                    w.optString("p"),
+                    w.optString("r"),
+                    w.optString("d") // 读取释义
                 ))
             }
             return OcrResponse(
@@ -291,15 +297,18 @@ class MangaOcrManager(private val webView: WebView) {
 
             result.words.forEach { word ->
                 val wordView = TextView(context).apply {
+                    // 显示逻辑保持不变
                     text = if (word.surface == word.baseForm) "${word.surface}\n " else "${word.surface}\n[${word.baseForm}]"
                     textSize = 12f
                     setPadding(20, 10, 20, 10)
                     gravity = android.view.Gravity.CENTER
+
+                    // 颜色逻辑保持不变
                     val bgColor = when {
                         word.pos.contains("名") -> "#E3F2FD"
-                        word.pos.contains("动") -> "#E8F5E9"
+                        word.pos.contains("動") -> "#E8F5E9"
                         word.pos.contains("形容") -> "#FFF3E0"
-                        word.pos.contains("助") -> "#F5F5F5"
+                        word.pos.contains("感") -> "#F5F5F5"
                         else -> "#FFFFFF"
                     }
                     background = android.graphics.drawable.GradientDrawable().apply {
@@ -307,7 +316,16 @@ class MangaOcrManager(private val webView: WebView) {
                         cornerRadius = 8f
                         setStroke(1, "#DDDDDD".toColorInt())
                     }
+
+                    // ---【核心修复】：添加点击事件 ---
+                    isClickable = true
+                    isFocusable = true
+                    // 添加水波纹效果 (可选，但在纯代码里写比较麻烦，这里先只加点击逻辑)
+                    setOnClickListener {
+                        showWordDetailDialog(context, word, result.text) // <--- 调用新函数
+                    }
                 }
+
                 containerWords.addView(wordView, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     setMargins(0, 8, 16, 8)
@@ -409,5 +427,79 @@ class MangaOcrManager(private val webView: WebView) {
                 Handler(Looper.getMainLooper()).post { textView.text = "翻译加载失败" }
             }
         }.start()
+    }
+
+    /**
+     * 显示单词详情并提供 Anki 导出选项
+     */
+    private fun showWordDetailDialog(context: Context, word: JapaneseWord, sourceSentence: String) {
+        // 构建显示的详情文本
+        val message = StringBuilder()
+        message.append("【读音】 ${word.reading}\n")
+        message.append("【词性】 ${word.pos}\n\n")
+        message.append("【释义】\n")
+
+        // 如果后端传回了释义，就显示；否则提示去查词
+        if (word.definition.isNotBlank()) {
+            message.append(word.definition)
+        } else {
+            message.append("(本地词典未收录此词，请点击下方按钮去Web搜索)")
+        }
+
+        android.app.AlertDialog.Builder(context)
+            .setTitle(word.baseForm) // 标题显示原型
+            .setMessage(message.toString())
+            .setPositiveButton("存入 Anki") { dialog, _ ->
+                exportToAnki(context, word, sourceSentence)
+                dialog.dismiss()
+            }
+            .setNeutralButton("更多查询") { _, _ ->
+                val options = arrayOf("Moji 辞书", "Weblio (日日)", "Google 搜索", "沪江小 D")
+                val query = word.baseForm
+
+                android.app.AlertDialog.Builder(context)
+                    .setTitle("选择搜索引擎")
+                    .setItems(options) { _, which ->
+                        val url = when (which) {
+                            0 -> "https://www.mojidict.com/details/$query"
+                            1 -> "https://www.weblio.jp/content/$query"
+                            2 -> "https://www.google.com/search?q=$query+意味"
+                            3 -> "https://dict.hjenglish.com/jp/jc/$query"
+                            else -> ""
+                        }
+                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                            url.toUri()))
+                    }
+                    .show()
+            }
+            .setNegativeButton("关闭", null)
+            .show()
+    }
+
+    private fun exportToAnki(context: Context, word: JapaneseWord, sourceSentence: String) {
+        // AnkiDroid API 的标准 Intent Action
+        val intent = android.content.Intent("com.ichi2.anki.action.ADD_NOTE")
+
+        // 自动填充字段
+        // 注意：你需要确保你的 Anki 里有对应的 Note Type，或者让用户自己在弹出的界面选
+        // 这里的 Key (front, back) 是 AnkiDroid 的通用约定，但也取决于用户设置
+        intent.putExtra("source", sourceSentence) // 来源句子作为参考
+        intent.putExtra("fields", arrayOf(
+            word.baseForm,           // 正面：单词原型
+            "${word.reading}\n\n${word.definition}\n\n例句：$sourceSentence" // 背面：读音+释义+例句
+        ))
+
+        // 尝试启动 AnkiDroid
+        try {
+            // 加上这个 flag 以免在某些手机上报错
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            // 如果用户没装 AnkiDroid
+            Toast.makeText(context, "未找到 AnkiDroid，请先安装", Toast.LENGTH_SHORT).show()
+            // 备选方案：复制到剪贴板
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Anki Card", "${word.baseForm}\n${word.definition}"))
+        }
     }
 }
