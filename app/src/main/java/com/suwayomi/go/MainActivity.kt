@@ -2,7 +2,6 @@ package com.suwayomi.go
 
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.Intent
@@ -11,11 +10,13 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.PointF
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Base64
 import android.view.KeyEvent
 import android.view.LayoutInflater
@@ -40,6 +41,7 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.app.ActivityCompat
 import androidx.core.content.edit
 import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
@@ -968,11 +970,34 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 101) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // 权限刚拿到时，弹窗提示
-                Toast.makeText(this, "Anki 授权成功！请再次点击“存入”即可导出", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "授权成功！请再次选择卡片导出", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, "权限被拒绝，无法使用 Anki 导出功能", Toast.LENGTH_LONG).show()
+                // 核心逻辑：检查用户是否点击了“不再询问” (Check if 'Don't ask again' was checked)
+                val permission = "com.ichi2.anki.permission.READ_WRITE_DATABASE"
+                val showRationale = ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
+
+                if (!showRationale) {
+                    // 用户拒绝并点击了“不再询问”，或者在系统设置中彻底禁用
+                    showPermissionSettingsDialog()
+                } else {
+                    Toast.makeText(this, "权限被拒绝，无法使用导出功能", Toast.LENGTH_SHORT).show()
+                }
             }
         }
+    }
+
+    // 引导用户去设置页的对话框 (Guide user to Settings)
+    private fun showPermissionSettingsDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("需要导出权限")
+            .setMessage("你已经禁用了 Anki 访问权限。请前往[设置 -> 应用 -> SuwayomiGO -> 权限]中手动开启“读取和写入 Anki 数据库”权限，或者尝试重新安装SuwayomiGO！")
+            .setPositiveButton("去设置") { _, _ ->
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                val uri = Uri.fromParts("package", packageName, null)
+                intent.data = uri
+                startActivity(intent)
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 }

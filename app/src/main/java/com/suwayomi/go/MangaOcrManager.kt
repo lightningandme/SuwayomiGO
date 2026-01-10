@@ -491,22 +491,40 @@ class MangaOcrManager(private val webView: WebView) {
 
         if (!hasPermission) {
             if (context is Activity) {
-                ActivityCompat.requestPermissions(context, arrayOf(ankiPermission), 101)
+                val permission = "com.ichi2.anki.permission.READ_WRITE_DATABASE"
+                // 如果系统建议显示理由，说明还没到“不再询问”的地步
+                if (ActivityCompat.shouldShowRequestPermissionRationale(context, permission)) {
+                    ActivityCompat.requestPermissions(context, arrayOf(permission), 101)
+                } else {
+                    // 可能是第一次申请，或者是已经点了“不再询问”
+                    // 先尝试申请，如果直接失败，onRequestPermissionsResult 会接管弹窗
+                    ActivityCompat.requestPermissions(context, arrayOf(permission), 101)
+                }
             }
             return
         }
 
         try {
+            // --- 核心修复点 1: 检查 API 连接状态 (Check API Connectivity) ---
+            // 首次运行或清除缓存后，deckList 往往是 null，需要触发 AnkiDroid 的内部授权界面
+            val currentDecks = api.deckList
+            if (currentDecks == null) {
+                // 如果拿不到牌组列表，通常是因为 Anki 还没授权给本 App
+                // 此时调用任意一个写操作，会触发 AnkiDroid 弹出“是否允许 SuwayomiGO 访问”的对话框
+                Toast.makeText(context, "请在 Anki 中点击“允许”后重试", Toast.LENGTH_LONG).show()
+                return
+            }
             val deckName = "SuwayomiGO"
             val modelName = "SuwayomiGO_Dict_v1"
             val fields = arrayOf("单词", "读音", "释义", "例句")
 
-            val deckId = api.deckList?.entries?.find { it.value == deckName }?.key ?: api.addNewDeck(deckName)
+            // --- 核心修复点 2: 使用更稳健的查询 (Robust ID Lookup) ---
+            val deckId = currentDecks.entries.find { it.value == deckName }?.key ?: api.addNewDeck(deckName)
 
-            val modelId = api.modelList?.entries?.find { it.value == modelName }?.key ?: api.addNewCustomModel(
-                modelName,
-                fields,
-                arrayOf("Card 1"),
+            // 同理，重新获取 modelList
+            val currentModels = api.modelList
+            val modelId = currentModels?.entries?.find { it.value == modelName }?.key ?: api.addNewCustomModel(
+                modelName, fields, arrayOf("Card 1"),
                 // 1. 正面模板 (Front): 单词居中 (Centered Word)
                 arrayOf("""
             <div style='text-align:center; font-size:35px; color:#1E88E5; font-weight:bold; margin-top:20px;'>
@@ -563,12 +581,18 @@ class MangaOcrManager(private val webView: WebView) {
                 if (noteId != null) {
                     Toast.makeText(context, "已成功导出至 Anki", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(context, "导出失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "导出失败，请检查 Anki 是否运行", Toast.LENGTH_SHORT).show()
                 }
             }
         } catch (e: Exception) {
             Log.e("AnkiAPI", "Export failed: ${e.message}")
-            Toast.makeText(context, "导出出错，请确认 Anki 已启动", Toast.LENGTH_SHORT).show()
+            // --- 核心修复点 3: 细化报错提示 ---
+            val errorMsg = e.message ?: ""
+            if (errorMsg.contains("permission", ignoreCase = true)) {
+                Toast.makeText(context, "请在 Anki 设置中开启 API 权限", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "导出出错，请确认 Anki 已启动并登录", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }
