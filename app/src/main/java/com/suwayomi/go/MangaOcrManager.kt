@@ -26,7 +26,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toColorInt
-import androidx.core.net.toUri
 import com.ichi2.anki.api.AddContentApi
 import okhttp3.Call
 import okhttp3.Callback
@@ -38,6 +37,7 @@ import okhttp3.Response
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.net.URLEncoder
 import kotlin.math.hypot
 
 /**
@@ -439,6 +439,65 @@ class MangaOcrManager(private val webView: WebView) {
     }
 
     /**
+     * 在应用内显示 WebView 对话框，实现不跳出应用浏览网页 (Show WebView dialog in-app)
+     * 修改为占据屏幕 70% 高度 (Occupies 70% of screen height)
+     */
+    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
+    private fun showWebViewDialog(context: Context, url: String) {
+        // 使用 BottomSheetDialog 实现下半屏显示 (Use BottomSheetDialog for bottom-half display)
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(context)
+        
+        val webViewContainer = WebView(context).apply {
+            // 设置初始高度为屏幕的 70% (Set initial height to 70% of screen)
+            val screenHeight = context.resources.displayMetrics.heightPixels
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (screenHeight * 0.7).toInt())
+            
+            settings.javaScriptEnabled = true // 启用 JavaScript (Enable JavaScript)
+            settings.domStorageEnabled = true // 启用 DOM 存储 (Enable DOM Storage)
+            // 确保点击网页链接时仍在当前 WebView 中打开 (Ensure links open within current WebView)
+            webViewClient = android.webkit.WebViewClient() 
+            loadUrl(url)
+
+            // ---【核心修复】：解决滑动冲突 (Fix scrolling conflict) ---
+            // 当用户在网页上滑动时，禁止 BottomSheet 拦截触摸事件
+            setOnTouchListener { v, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        // 允许用户向下滑动关闭，但优先保证网页垂直滚动
+                        // 如果网页可以滚动，则禁止父容器拦截
+                        v.parent.requestDisallowInterceptTouchEvent(true)
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        // 始终禁止父容器在滑动过程中拦截
+                        v.parent.requestDisallowInterceptTouchEvent(true)
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        v.parent.requestDisallowInterceptTouchEvent(false)
+                    }
+                }
+                false // 返回 false 允许 WebView 继续处理自己的触摸逻辑
+            }
+        }
+
+        dialog.setContentView(webViewContainer)
+        
+        // 配置 BottomSheet 行为，设置默认高度为 70% (Configure behavior, set peek height to 70%)
+        dialog.behavior.peekHeight = (context.resources.displayMetrics.heightPixels * 0.7).toInt()
+        
+        // 监听物理返回键以支持网页回退 (Listen for back key to support web navigation)
+        webViewContainer.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP && webViewContainer.canGoBack()) {
+                webViewContainer.goBack()
+                true
+            } else {
+                false
+            }
+        }
+
+        dialog.show()
+    }
+
+    /**
      * 显示单词详情并提供 Anki 导出选项
      */
     private fun showWordDetailDialog(context: Context, word: JapaneseWord, sourceSentence: String) {
@@ -463,20 +522,23 @@ class MangaOcrManager(private val webView: WebView) {
                 dialog.dismiss()
             }
             .setNeutralButton("Web搜索") { _, _ ->
-                val options = arrayOf("Weblio (日日)", "Google 搜索", "沪江小 D")
-                val query = word.baseForm
+                val options = arrayOf("Weblio (日中)","Kotobank (日日)", "Jisho (日英)", "Massif (例句)", "Google 搜索")
+                val query = try { URLEncoder.encode(word.baseForm, "UTF-8") } catch (_: Exception) { word.baseForm }
 
                 android.app.AlertDialog.Builder(context)
                     .setTitle("选择搜索引擎")
                     .setItems(options) { _, which ->
                         val url = when (which) {
-                            0 -> "https://www.weblio.jp/content/$query"
-                            1 -> "https://www.google.com/search?q=$query+意味"
-                            2 -> "https://dict.hjenglish.com/jp/jc/$query"
+                            0 -> "https://cjjc.weblio.jp/content/$query"
+                            1 -> "https://kotobank.jp/word/$query"
+                            2 -> "https://jisho.org/search/$query"
+                            3 -> "https://massif.la/ja/search?q=$query"
+                            4 -> "https://www.google.com/search?q=$query+意味"
                             else -> ""
                         }
-                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
-                            url.toUri()))
+                        if (url.isNotEmpty()) {
+                            showWebViewDialog(context, url) // 使用应用内浏览 (Use in-app browsing)
+                        }
                     }
                     .show()
             }
