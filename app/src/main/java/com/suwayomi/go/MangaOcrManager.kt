@@ -277,8 +277,10 @@ class MangaOcrManager(private val webView: WebView) {
             val dialog = object : android.app.Dialog(context) {
                 override fun dispatchKeyEvent(event: KeyEvent): Boolean {
                     val keyCode = event.keyCode
+                    // 拦截音量上键和音量下键 (Intercept Volume Up and Volume Down)
                     if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-                        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP && event.action == KeyEvent.ACTION_UP) {
+                        // 无论音量加还是音量减，只要抬起按键 (ACTION_UP) 就关闭对话框 (Dismiss on key up for both buttons)
+                        if (event.action == KeyEvent.ACTION_UP) {
                             this.dismiss()
                         }
                         return true 
