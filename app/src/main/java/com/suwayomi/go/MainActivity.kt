@@ -968,10 +968,10 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 101) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "✅ 权限已获取！请再次点击存入", Toast.LENGTH_SHORT).show()
+                // 权限刚拿到时，弹窗提示
+                Toast.makeText(this, "Anki 授权成功！请再次点击“存入”即可导出", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, "⚠️ 权限被拒绝，无法写入 Anki", Toast.LENGTH_LONG).show()
-                // 如果被拒绝，可以在这里尝试备用的 Intent 跳转方案
+                Toast.makeText(this, "权限被拒绝，无法使用 Anki 导出功能", Toast.LENGTH_LONG).show()
             }
         }
     }

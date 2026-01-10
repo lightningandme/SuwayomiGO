@@ -1,7 +1,9 @@
 package com.suwayomi.go
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.PointF
@@ -20,8 +22,12 @@ import android.webkit.WebView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toColorInt
+import androidx.core.net.toUri
+import com.ichi2.anki.api.AddContentApi
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -33,13 +39,6 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import kotlin.math.hypot
-import androidx.core.net.toUri
-import com.ichi2.anki.api.AddContentApi
-import android.app.Activity
-import android.content.Intent
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import android.content.pm.PackageManager
 
 /**
  * 专门处理漫画 OCR 逻辑的管理类 (Management class for Manga OCR logic)
@@ -91,8 +90,10 @@ class MangaOcrManager(private val webView: WebView) {
     private val client = OkHttpClient()
     private var lastRequestTime: Long = 0
 
-    // 1. 定义 API 实例 (参考 AnkiDroidHelper 的构造方式)
-    private val api by lazy { AddContentApi(webView.context.applicationContext) }
+    // 在 MangaOcrManager 类顶部声明
+    private val api: AddContentApi by lazy {
+        AddContentApi(webView.context.applicationContext)
+    }
     /**
      * 常规点按识别 (Regular click recognition)
      */
@@ -485,122 +486,89 @@ class MangaOcrManager(private val webView: WebView) {
     }
 
     private fun exportToAnki(context: Context, word: JapaneseWord, sourceSentence: String) {
-        // 定义 Anki 的专用权限字符串
         val ankiPermission = "com.ichi2.anki.permission.READ_WRITE_DATABASE"
+        val hasPermission = ContextCompat.checkSelfPermission(context, ankiPermission) == PackageManager.PERMISSION_GRANTED
 
-        // --- 1. 权限检测 (双重检查) ---
-        // 检查 A: 是否拥有系统层面的权限 (Jidoujisho 逻辑)
-        val hasSystemPermission = ContextCompat.checkSelfPermission(context, ankiPermission) == PackageManager.PERMISSION_GRANTED
-
-        // 检查 B: API 是否真的可用 (尝试调用)
-        var isApiReady = false
-        if (hasSystemPermission) {
-            try {
-                api.deckList // 尝试一次调用
-                isApiReady = true
-            } catch (e: Exception) {
-                // 即使有系统权限，API 也可能抛异常
-                isApiReady = false
-            }
-        }
-
-        // --- 2. 如果没权限，发起申请 ---
-        if (!hasSystemPermission || !isApiReady) {
+        if (!hasPermission) {
             if (context is Activity) {
-                Toast.makeText(context, "正在请求 Anki 授权...", Toast.LENGTH_SHORT).show()
-
-                // 优先尝试方案 A：申请 Android 系统权限 (模仿 Jidoujisho)
-                // 这通常会弹出一个系统级的对话框
                 ActivityCompat.requestPermissions(context, arrayOf(ankiPermission), 101)
-
-                // 只有当 API 明确抛出 SecurityException 时，我们才尝试 Intent 跳转 (作为备选)
-                // 但为了防止冲突，这里我们依赖 MainActivity 的 onRequestPermissionsResult 来处理后续
-
-                // 如果你想双管齐下，可以把 Intent 逻辑放在 catch 块里，但通常 ActivityCompat 就够了
-                return
             }
             return
         }
 
-        // --- 3. 执行导出 (权限已就绪) ---
         try {
-            val deckName = "MangaOCR_Study"
-            val modelName = "Manga_Dict_v1"
+            val deckName = "SuwayomiGO"
+            val modelName = "SuwayomiGO_Dict_v1"
             val fields = arrayOf("单词", "读音", "释义", "例句")
 
-            // 查找或创建 Deck
-            var finalDeckId: Long? = null
-            val deckList = api.deckList
-            if (deckList != null) {
-                for (entry in deckList.entries) {
-                    if (entry.value == deckName) {
-                        finalDeckId = entry.key
-                        break
-                    }
+            val deckId = api.deckList?.entries?.find { it.value == deckName }?.key ?: api.addNewDeck(deckName)
+
+            val modelId = api.modelList?.entries?.find { it.value == modelName }?.key ?: api.addNewCustomModel(
+                modelName,
+                fields,
+                arrayOf("Card 1"),
+                // 1. 正面模板 (Front): 单词居中 (Centered Word)
+                arrayOf("""
+            <div style='text-align:center; font-size:35px; color:#1E88E5; font-weight:bold; margin-top:20px;'>
+                {{单词}}
+            </div>
+        """.trimIndent()),
+                // 2. 背面模板 (Back): 布局微调 (Layout adjustment)
+                arrayOf("""
+            <div style='text-align:center;'>
+                <div style='font-size:35px; color:#1E88E5; font-weight:bold;'>{{单词}}</div>
+                <div style='font-size:20px; color:#666; margin-bottom:10px;'>【{{读音}}】</div>
+            </div>
+            
+            <hr>
+            
+            <div style='text-align:left; padding:0 10px;'>
+                <div style='margin-bottom:15px;'>
+                    <b style='color:#757575; font-size:13px;'>例句:</b><br>
+                    <div style='color:#444; font-style:italic; font-size:16px; margin-top:4px;'>{{例句}}</div>
+                </div>
+                
+                <div style='background:#f9f9f9; padding:12px; border-radius:8px; border-left:4px solid #D81B60;'>
+                    <b style='color:#D81B60; font-size:13px;'>释义:</b><br>
+                    <div style='margin-top:4px; line-height:1.5; font-size:16px;'>{{释义}}</div>
+                </div>
+            </div>
+        """.trimIndent()),
+                null, null, null
+            )
+
+
+            if (deckId != null && modelId != null) {
+                // --- 适配 api-v1.1.0 的 findDuplicateNotes ---
+                // 这个方法要求传入 mid (Model ID) 和一个 key (String)
+                // 这里的 key 通常指的就是卡片的“首选字段”，即我们的 word.baseForm
+
+                val duplicateNotes = api.findDuplicateNotes(modelId, word.baseForm)
+
+                // 如果返回的列表不为空，说明已经存在重复笔记
+                if (duplicateNotes != null && duplicateNotes.isNotEmpty()) {
+                    Toast.makeText(context, "Anki 中已存在该词，无需重复导出", Toast.LENGTH_SHORT).show()
+                    return // 发现重复，直接跳出
                 }
-            }
-            if (finalDeckId == null) {
-                finalDeckId = api.addNewDeck(deckName)
-            }
+                // --- 去重结束 ---
 
-            // 查找或创建 Model
-            var finalModelId: Long? = null
-            val modelList = api.modelList
-            if (modelList != null) {
-                for (entry in modelList.entries) {
-                    if (entry.value == modelName) {
-                        finalModelId = entry.key
-                        break
-                    }
-                }
-            }
-
-            if (finalModelId == null) {
-                finalModelId = api.addNewCustomModel(
-                    modelName,
-                    fields,
-                    arrayOf("Card 1"),
-                    arrayOf("<div style='font-size:30px; color:#1E88E5;'>{{单词}}</div>"),
-                    arrayOf("""
-                    <div style='font-size:30px; color:#1E88E5;'>{{单词}}</div>
-                    <div style='font-size:18px; color:#666;'>【{{读音}}】</div>
-                    <hr>
-                    <div style='text-align:left; background:#f5f5f5; padding:15px; border-radius:10px;'>
-                        <b style='color:#D81B60;'>释义:</b><br>{{释义}}
-                    </div>
-                    <div style='margin-top:15px; color:gray; font-size:12px;'>
-                        Source: {{例句}}
-                    </div>
-                """.trimIndent()),
-                    null, null, null
-                )
-            }
-
-            if (finalDeckId != null && finalModelId != null) {
-                val fieldValues = arrayOf(
+                val values = arrayOf(
                     word.baseForm,
                     word.reading,
                     word.definition.replace("\n", "<br>"),
                     sourceSentence
                 )
-                // tags 传 null 即可
-                val noteId = api.addNote(finalModelId, finalDeckId, fieldValues, null)
 
+                val noteId = api.addNote(modelId, deckId, values, null)
                 if (noteId != null) {
-                    Toast.makeText(context, "成功导出到 Anki", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "已成功导出至 Anki", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(context, "导出失败", Toast.LENGTH_SHORT).show()
                 }
             }
-
         } catch (e: Exception) {
-            Log.e("MangaOCR", "Export error", e)
-            // 如果这里报错 SecurityException，说明 ActivityCompat 申请还没生效，提示用户重试
-            if (e is SecurityException) {
-                Toast.makeText(context, "权限同步中，请再点一次", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "错误: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
+            Log.e("AnkiAPI", "Export failed: ${e.message}")
+            Toast.makeText(context, "导出出错，请确认 Anki 已启动", Toast.LENGTH_SHORT).show()
         }
     }
 }
