@@ -9,7 +9,10 @@
     <queries>
         <package android:name="com.ichi2.anki" />
         <intent>
-            <action android:name="com.ichi2.anki.action.ADD_NOTE" />
+            <action android:name="com.ichi2.anki.intent.ACTION_API_PERMISSION" />
+        </intent>
+        <intent>
+            <action android:name="com.ichi2.anki.ACTION_API_PERMISSION" />
         </intent>
     </queries>
 

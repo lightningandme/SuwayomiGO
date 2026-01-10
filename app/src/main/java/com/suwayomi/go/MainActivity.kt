@@ -2,9 +2,12 @@ package com.suwayomi.go
 
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
+import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.PointF
@@ -957,6 +960,18 @@ class MainActivity : AppCompatActivity() {
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             } else {
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 101) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "✅ 权限已获取！请再次点击存入", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "⚠️ 权限被拒绝，无法写入 Anki", Toast.LENGTH_LONG).show()
+                // 如果被拒绝，可以在这里尝试备用的 Intent 跳转方案
             }
         }
     }
