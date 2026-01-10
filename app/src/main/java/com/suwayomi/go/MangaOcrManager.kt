@@ -462,18 +462,17 @@ class MangaOcrManager(private val webView: WebView) {
                 exportToAnki(context, word, sourceSentence)
                 dialog.dismiss()
             }
-            .setNeutralButton("更多查询") { _, _ ->
-                val options = arrayOf("Moji 辞书", "Weblio (日日)", "Google 搜索", "沪江小 D")
+            .setNeutralButton("Web搜索") { _, _ ->
+                val options = arrayOf("Weblio (日日)", "Google 搜索", "沪江小 D")
                 val query = word.baseForm
 
                 android.app.AlertDialog.Builder(context)
                     .setTitle("选择搜索引擎")
                     .setItems(options) { _, which ->
                         val url = when (which) {
-                            0 -> "https://www.mojidict.com/details/$query"
-                            1 -> "https://www.weblio.jp/content/$query"
-                            2 -> "https://www.google.com/search?q=$query+意味"
-                            3 -> "https://dict.hjenglish.com/jp/jc/$query"
+                            0 -> "https://www.weblio.jp/content/$query"
+                            1 -> "https://www.google.com/search?q=$query+意味"
+                            2 -> "https://dict.hjenglish.com/jp/jc/$query"
                             else -> ""
                         }
                         context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
@@ -516,7 +515,9 @@ class MangaOcrManager(private val webView: WebView) {
             }
             val deckName = "SuwayomiGO"
             val modelName = "SuwayomiGO_Dict_v1"
-            val fields = arrayOf("单词", "读音", "释义", "例句")
+            val fields = arrayOf("单词", "读音", "释义", "原句", "来源")
+            val fullTitle = webView.title ?: ""
+            val mangaName = fullTitle.substringBefore(" - Suwayomi")
 
             // --- 核心修复点 2: 使用更稳健的查询 (Robust ID Lookup) ---
             val deckId = currentDecks.entries.find { it.value == deckName }?.key ?: api.addNewDeck(deckName)
@@ -527,23 +528,27 @@ class MangaOcrManager(private val webView: WebView) {
                 modelName, fields, arrayOf("Card 1"),
                 // 1. 正面模板 (Front): 单词居中 (Centered Word)
                 arrayOf("""
-            <div style='text-align:center; font-size:35px; color:#1E88E5; font-weight:bold; margin-top:20px;'>
+            <div style='text-align:center; font-size:35px; color:#3581b2; font-weight:bold; margin-top:20px;'>
                 {{单词}}
             </div>
         """.trimIndent()),
                 // 2. 背面模板 (Back): 布局微调 (Layout adjustment)
                 arrayOf("""
             <div style='text-align:center;'>
-                <div style='font-size:35px; color:#1E88E5; font-weight:bold;'>{{单词}}</div>
-                <div style='font-size:20px; color:#666; margin-bottom:10px;'>【{{读音}}】</div>
+                <div style='font-size:35px; color:#3581b2; font-weight:bold;'>{{单词}}</div>
+                <div style='font-size:20px; color:#252743; margin-bottom:10px;'>【{{读音}}】</div>
             </div>
             
             <hr>
             
             <div style='text-align:left; padding:0 10px;'>
                 <div style='margin-bottom:15px;'>
-                    <b style='color:#757575; font-size:13px;'>例句:</b><br>
-                    <div style='color:#444; font-style:italic; font-size:16px; margin-top:4px;'>{{例句}}</div>
+                    <b style='color:#252743; font-size:13px;'>原句:</b><br>
+                    <div style='color:#444; font-style:italic; font-size:16px; margin-top:4px;'>{{原句}}</div>
+                </div>
+                
+                <div style='text-align:right;'>
+                    <div style='font-size:13px; color:#252743;'>{{来源}}</div>
                 </div>
                 
                 <div style='background:#f9f9f9; padding:12px; border-radius:8px; border-left:4px solid #D81B60;'>
@@ -574,7 +579,8 @@ class MangaOcrManager(private val webView: WebView) {
                     word.baseForm,
                     word.reading,
                     word.definition.replace("\n", "<br>"),
-                    sourceSentence
+                    sourceSentence,
+                    mangaName
                 )
 
                 val noteId = api.addNote(modelId, deckId, values, null)
