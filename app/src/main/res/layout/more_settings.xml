@@ -25,7 +25,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="更多设置"
+                android:text="操作设置"
                 android:textSize="20sp"
                 android:textColor="#3581b2"
                 android:textStyle="bold"
@@ -36,10 +36,61 @@
                 android:id="@+id/checkVolumePaging"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="按键翻页时刷新（for E-Ink）"
+                android:text="按键翻页时闪白刷新（for E-Ink）"
                 android:textSize="15sp"
                 android:checked="true"
                 android:padding="8dp"
+                tools:ignore="HardcodedText" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="OCR设置"
+                android:textSize="20sp"
+                android:textColor="#3581b2"
+                android:textStyle="bold"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="8dp"
+                tools:ignore="HardcodedText" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="服务器地址（部署方法详见GitHub页面）"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/editOcrUrl"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textUri"
+                    android:textSize="14sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- 新增 OCR 令牌输入框 (New OCR Token field) -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="OCR 令牌 (默认为：suwasuwa)"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/editOcrSecretKey"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textPassword"
+                    android:textSize="14sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnTestOcr"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:text="测试连接"
+                android:textColor="#3581b2"
                 tools:ignore="HardcodedText" />
             
         </LinearLayout>
