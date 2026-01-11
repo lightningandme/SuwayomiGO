@@ -218,6 +218,7 @@ class MangaOcrManager(private val webView: WebView) {
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
         val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
         val ocrUrl = "${serverUrl}/ocr"
+        val secretKey = prefs.getString("ocr_secret_key", "") ?: ""
 
         if (ocrUrl.isEmpty()) {
             Handler(Looper.getMainLooper()).post {
@@ -238,10 +239,23 @@ class MangaOcrManager(private val webView: WebView) {
         try {
             lastRequestTime = currentTime
 
-            val request = Request.Builder().url(ocrUrl).post(body).build()
+            // --- 核心修改点：添加 .addHeader ---
+            val request = Request.Builder()
+                .url(ocrUrl)
+                .post(body)
+                .addHeader("X-API-Key", secretKey) // 必须与后端定义的 API_KEY_NAME 一致
+                .build()
+            // ------------------------------
             client.newCall(request).enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
+                        // 增加对 401 错误的处理 (Handle 401 Unauthorized)
+                        if (response.code == 401) {
+                            Handler(Looper.getMainLooper()).post {
+                                Toast.makeText(webView.context, "请求失败，请检查 OCR 令牌", Toast.LENGTH_LONG).show()
+                            }
+                            return
+                        }
                         if (!response.isSuccessful) return
                         val bodyString = response.body?.string() ?: ""
                         try {
@@ -422,17 +436,34 @@ class MangaOcrManager(private val webView: WebView) {
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
         val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
         val translationUrl = "${serverUrl}/get_translation"
+        // 1. 获取保存的 Secret Key (Get the saved secret key)
+        val secretKey = prefs.getString("ocr_secret_key", "") ?: ""
         Thread {
             try {
                 val client = OkHttpClient()
-                val request = Request.Builder().url(translationUrl).build()
+                // 2. 在构建 Request 时添加 Header (Add the authentication header)
+                val request = Request.Builder()
+                    .url(translationUrl)
+                    .addHeader("X-API-Key", secretKey)
+                    .build()
                 val response = client.newCall(request).execute()
-                val body = response.body?.string() ?: ""
-                val json = JSONObject(body)
-                val translation = json.optString("translation")
-                Handler(Looper.getMainLooper()).post {
-                    textView.text = translation
-                    textView.alpha = 1.0f
+
+                response.use {
+                    // 3. 处理 401 验证失败的情况 (Handle unauthorized status)
+                    if (response.code == 401) {
+                        Handler(Looper.getMainLooper()).post {
+                            textView.text = "翻译请求失败，请检查 OCR 令牌"
+                        }
+                        return@Thread
+                    }
+
+                    val body = response.body?.string() ?: ""
+                    val json = JSONObject(body)
+                    val translation = json.optString("translation")
+                    Handler(Looper.getMainLooper()).post {
+                        textView.text = translation
+                        textView.alpha = 1.0f
+                    }
                 }
             } catch (_: Exception) {
                 Handler(Looper.getMainLooper()).post { textView.text = "翻译加载失败" }

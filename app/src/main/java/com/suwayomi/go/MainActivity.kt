@@ -714,10 +714,12 @@ class MainActivity : AppCompatActivity() {
         val view = LayoutInflater.from(this).inflate(R.layout.more_settings, null)
         val checkVolumePaging = view.findViewById<SwitchCompat>(R.id.checkVolumePaging)
         val editOcrUrl = view.findViewById<EditText>(R.id.editOcrUrl)
+        val editOcrSecretKey = view.findViewById<EditText>(R.id.editOcrSecretKey)
         val btnTestOcr = view.findViewById<View>(R.id.btnTestOcr)
 
         checkVolumePaging.isChecked = prefs.getBoolean("volume_paging", true)
         editOcrUrl.setText(prefs.getString("ocr_server_url", ""))
+        editOcrSecretKey.setText(prefs.getString("ocr_secret_key", "suwa"))
 
         btnTestOcr.setOnClickListener {
             var rawInput = editOcrUrl.text.toString().trim()
@@ -731,9 +733,8 @@ class MainActivity : AppCompatActivity() {
                 editOcrUrl.setText(rawInput)
             }
 
-            // Use main credentials for OCR test as well
-            val user = prefs.getString("user", "") ?: ""
-            val pass = prefs.getString("pass", "") ?: ""
+            // --- 核心修改：仅使用 Secret Key 进行验证，不再依赖 user/pass (Use only secret key) ---
+            val secretKey = editOcrSecretKey.text.toString().trim()
 
             Toast.makeText(this, "正在测试连接...", Toast.LENGTH_SHORT).show()
 
@@ -744,10 +745,9 @@ class MainActivity : AppCompatActivity() {
                     val client = OkHttpClient()
                     val requestBuilder = Request.Builder().url(testUrl)
                     
-                    if (user.isNotEmpty() && pass.isNotEmpty()) {
-                        val auth = "$user:$pass"
-                        val base64Auth = Base64.encodeToString(auth.toByteArray(), Base64.NO_WRAP)
-                        requestBuilder.addHeader("Authorization", "Basic $base64Auth")
+                    // Add OCR Secret Key to Header
+                    if (secretKey.isNotEmpty()) {
+                        requestBuilder.addHeader("X-API-Key", secretKey)
                     }
                     
                     val request = requestBuilder.build()
@@ -764,29 +764,27 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         override fun onResponse(call: Call, response: Response) {
-                            val isAuthError = response.code == 401
-                            val isSuccess = response.isSuccessful || response.code == 405 || isAuthError
-                            val body = try { response.body?.string() ?: "" } catch (_: Exception) { "" }
-
-                            val hasMarker = body.contains("<<suwayomi-subpath-injection>>")
-                            val hasTitle = body.contains("<title>Suwayomi")
-                            val hasMeta = body.contains("apple-mobile-web-app-title") && body.contains("Suwayomi")
-                            val isSuwayomi = hasMarker || hasTitle || hasMeta
+                            // 状态识别：401 为服务器基础认证（Basic Auth）要求，403 为令牌（Token）错误
+                            val isAuthRequired = response.code == 401
+                            val isTokenError = response.code == 403
+                            // 认证成功：2xx 成功 或 405 方法不允许（路径正确且令牌已通过验证）
+                            val isApiKeySuccess = response.isSuccessful || response.code == 405
 
                             runOnUiThread {
-                                if (isSuccess) {
+                                if (isApiKeySuccess) {
                                     editOcrUrl.setText(baseUrl)
-                                    val msg = when {
-                                        isAuthError -> "连接成功，但账号密码错误"
-                                        isSuwayomi -> "连接成功：已识别 Suwayomi 服务"
-                                        else -> "连接成功！"
-                                    }
-                                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this@MainActivity, "令牌认证成功！", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    if (fallbackToHttps) {
-                                        performTest("https://$rawInput", false)
+                                    if (isTokenError) {
+                                        Toast.makeText(this@MainActivity, "令牌错误 (403 Forbidden)", Toast.LENGTH_SHORT).show()
+                                    } else if (isAuthRequired) {
+                                        Toast.makeText(this@MainActivity, "服务器需要认证 (401 Unauthorized)", Toast.LENGTH_SHORT).show()
                                     } else {
-                                        Toast.makeText(this@MainActivity, "服务器响应错误: ${response.code}", Toast.LENGTH_SHORT).show()
+                                        if (fallbackToHttps) {
+                                            performTest("https://$rawInput", false)
+                                        } else {
+                                            Toast.makeText(this@MainActivity, "服务器响应错误: ${response.code}", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                 }
                             }
@@ -809,10 +807,11 @@ class MainActivity : AppCompatActivity() {
 
         val dialog = AlertDialog.Builder(this)
             .setView(view)
-            .setPositiveButton("确定") { _, _ ->
+            .setPositiveButton("保存") { _, _ ->
                 prefs.edit {
                     putBoolean("volume_paging", checkVolumePaging.isChecked)
                     putString("ocr_server_url", editOcrUrl.text.toString().trim())
+                    putString("ocr_secret_key", editOcrSecretKey.text.toString().trim())
                 }
             }
             .setNegativeButton("取消", null)
@@ -986,7 +985,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 引导用户去设置页的对话框 (Guide user to Settings)
+    // 引导用户去设置页 of 对话框 (Guide user to Settings)
     private fun showPermissionSettingsDialog() {
         AlertDialog.Builder(this)
             .setTitle("需要导出权限")
