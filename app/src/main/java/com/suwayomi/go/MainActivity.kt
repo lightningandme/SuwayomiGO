@@ -625,9 +625,10 @@ class MainActivity : AppCompatActivity() {
 
                             runOnUiThread {
                                 if (isReachable) {
-                                    // 核心微调：仅确保地址以 / 结尾，禁止将处理后的地址或跳转后的地址回传给地址栏 (Ensure trailing slash and prohibit backflow to UI)
-                                    val cleanedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
-                                    // editUrl.setText(cleanedUrl) // 禁止回传处理后的 URL 到 UI (Stop updating the URL in the dialog)
+                                    // 核心微调：清洗地址，仅保留协议、主机名和端口号
+                                    val uri = baseUrl.toUri()
+                                    val cleanedUrl = "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}/"
+                                    editUrl.setText(cleanedUrl)
                                     
                                     if (isSuwayomi) {
                                         // 仅执行自动保存操作，不进入网页，不关闭对话框 (Perform auto-save only)
@@ -695,8 +696,9 @@ class MainActivity : AppCompatActivity() {
                 val savedUser = prefs.getString("user", "")
                 val savedPass = prefs.getString("pass", "")
 
-                // 在比对前确保输入地址以 / 结尾 (Ensure URL ends with / before comparison)
-                val cleanedUrlToLoad = if (urlToLoad.endsWith("/")) urlToLoad else "$urlToLoad/"
+                // 核心微调：规范化输入地址以便与已保存的配置比对 (Normalize for comparison)
+                val uri = urlToLoad.toUri()
+                val cleanedUrlToLoad = "${uri.scheme}://${uri.host}${if (uri.port != -1) ":${uri.port}" else ""}/"
 
                 // 核心微调：检查当前输入是否与已测试通过的配置一致
                 // 任何未经测试通过的更改全都会被拦截并提示 (Intercept any untested changes)
@@ -721,7 +723,7 @@ class MainActivity : AppCompatActivity() {
 
         checkVolumePaging.isChecked = prefs.getBoolean("volume_paging", true)
         editOcrUrl.setText(prefs.getString("ocr_server_url", ""))
-        editOcrSecretKey.setText(prefs.getString("ocr_secret_key", "suwa"))
+        editOcrSecretKey.setText(prefs.getString("ocr_secret_key", "suwasuwa"))
 
         btnTestOcr.setOnClickListener {
             var rawInput = editOcrUrl.text.toString().trim()
@@ -741,7 +743,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "正在测试连接...", Toast.LENGTH_SHORT).show()
 
             fun performTest(baseUrl: String, fallbackToHttps: Boolean) {
-                val testUrl = if (baseUrl.endsWith("/")) "${baseUrl}ocr" else "$baseUrl/ocr"
+                val testUrl = if (baseUrl.endsWith("/")) "${baseUrl}health" else "$baseUrl/health"
                 
                 try {
                     val client = OkHttpClient()
@@ -766,26 +768,34 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         override fun onResponse(call: Call, response: Response) {
-                            // 状态识别：401 为服务器基础认证（Basic Auth）要求，403 为令牌（Token）错误
-                            val isAuthRequired = response.code == 401
-                            val isTokenError = response.code == 403
-                            // 认证成功：2xx 成功 或 405 方法不允许（路径正确且令牌已通过验证）
-                            val isApiKeySuccess = response.isSuccessful || response.code == 405
 
                             runOnUiThread {
-                                if (isApiKeySuccess) {
+                                // 1. 认证成功：服务器返回 200 OK
+                                if (response.isSuccessful) {
                                     editOcrUrl.setText(baseUrl)
-                                    Toast.makeText(this@MainActivity, "令牌认证成功！", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this@MainActivity, "✅ 令牌认证成功！", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    if (isTokenError) {
-                                        Toast.makeText(this@MainActivity, "令牌错误 (403 Forbidden)", Toast.LENGTH_SHORT).show()
-                                    } else if (isAuthRequired) {
-                                        Toast.makeText(this@MainActivity, "服务器需要认证 (401 Unauthorized)", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        if (fallbackToHttps) {
-                                            performTest("https://$rawInput", false)
-                                        } else {
-                                            Toast.makeText(this@MainActivity, "服务器响应错误: ${response.code}", Toast.LENGTH_SHORT).show()
+                                    // 2. 认证失败：根据状态码给出精准反馈
+                                    when (response.code) {
+                                        401 -> {
+                                            // 对应 FastAPI 中的 HTTPException(status_code=401)
+                                            Toast.makeText(this@MainActivity, "❌ 令牌错误 (Unauthorized)", Toast.LENGTH_SHORT).show()
+                                        }
+                                        404 -> {
+                                            // 路径不对，可能没加 /health 或者后端没定义这个接口
+                                            Toast.makeText(this@MainActivity, "❓ 接口不存在 (404 Not Found)", Toast.LENGTH_SHORT).show()
+                                        }
+                                        403 -> {
+                                            // 某些代理或防火墙可能会拦截并返回 403
+                                            Toast.makeText(this@MainActivity, "🚫 访问被拒绝 (403 Forbidden)", Toast.LENGTH_SHORT).show()
+                                        }
+                                        else -> {
+                                            // 其他错误则尝试 HTTPS 降级或报错
+                                            if (fallbackToHttps) {
+                                                performTest("https://$rawInput", false)
+                                            } else {
+                                                Toast.makeText(this@MainActivity, "⚠️ 服务器响应错误: ${response.code}", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     }
                                 }
@@ -990,9 +1000,9 @@ class MainActivity : AppCompatActivity() {
     // 引导用户去设置页 of 对话框 (Guide user to Settings)
     private fun showPermissionSettingsDialog() {
         AlertDialog.Builder(this)
-            .setTitle("需要导出权限")
-            .setMessage("你已经禁用了 Anki 访问权限。请前往[设置 -> 应用 -> SuwayomiGO -> 权限]中手动开启“读取和写入 Anki 数据库”权限，或者尝试重新安装SuwayomiGO！")
-            .setPositiveButton("去设置") { _, _ ->
+            .setTitle("导出词卡出现问题")
+            .setMessage("请你确认：\n1.已安装官方AnkiDroid\n2.在AnkiDroid高级设置中已启用API\n3.如果授权弹窗曾被拒绝，可能需要检查SuwayomiGO相关权限，或重装应用")
+            .setPositiveButton("检查权限") { _, _ ->
                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                 val uri = Uri.fromParts("package", packageName, null)
                 intent.data = uri
