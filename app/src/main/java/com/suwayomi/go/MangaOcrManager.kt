@@ -163,7 +163,7 @@ class MangaOcrManager(private val webView: WebView) {
         val density = webView.context.resources.displayMetrics.density
         // 启发式判断：起点和终点足够接近，且路径长度明显大于起终点距离且达到一定长度
         // (Heuristic: start/end close enough, path length significantly longer than dist and exceeds threshold)
-        return dist < 40 * density && pathLength > 100 * density && pathLength > dist * 2
+        return dist < 50 * density && pathLength > 100 * density && pathLength > dist * 2
     }
 
     private fun getBoundingBox(points: List<PointF>): RectF {
@@ -203,6 +203,7 @@ class MangaOcrManager(private val webView: WebView) {
         sendToOcrServer(base64String, 0, 0, clickY)
     }
 
+    @SuppressLint("DirectSystemCurrentTimeMillisUsage")
     private fun sendToOcrServer(base64Image: String, relX: Int, relY: Int, absClickY: Int) {
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastRequestTime < 3000) {
@@ -432,6 +433,7 @@ class MangaOcrManager(private val webView: WebView) {
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private fun fetchTranslationAsync(textView: TextView) {
         val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
         val serverUrl = prefs.getString("ocr_server_url", "") ?: ""

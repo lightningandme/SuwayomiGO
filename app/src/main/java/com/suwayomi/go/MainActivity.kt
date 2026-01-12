@@ -423,7 +423,9 @@ class MainActivity : AppCompatActivity() {
                     val absDeltaY = abs(deltaY)
 
                     // 核心逻辑：在章节页面检测下滑手势切换 OCR 模式
-                    if (isChapterPage && deltaY > 400 && absDeltaY > absDeltaX * 1.5) {
+                    // 阈值修改：由固定 400 改为屏幕高度的 60% (Threshold: Fixed 400 -> 60% screen height)
+                    val screenHeight = resources.displayMetrics.heightPixels
+                    if (isChapterPage && deltaY > screenHeight * 0.6 && absDeltaY > absDeltaX * 1.5) {
                         setOcrEnabled(!isOcrEnabled)
                         val statusText = if (isOcrEnabled) "OCR 模式已开启" else "OCR 模式已关闭"
                         Toast.makeText(this, statusText, Toast.LENGTH_LONG).show()
