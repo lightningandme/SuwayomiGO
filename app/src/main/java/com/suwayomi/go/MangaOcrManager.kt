@@ -476,9 +476,10 @@ class MangaOcrManager(private val webView: WebView) {
     /**
      * 在应用内显示 WebView 对话框，实现不跳出应用浏览网页 (Show WebView dialog in-app)
      * 修改为占据屏幕 70% 高度 (Occupies 70% of screen height)
+     * @param onDismiss 对话框关闭时的回调 (Callback when dialog is dismissed)
      */
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
-    private fun showWebViewDialog(context: Context, url: String) {
+    private fun showWebViewDialog(context: Context, url: String, onDismiss: (() -> Unit)? = null) {
         // 使用 BottomSheetDialog 实现下半屏显示 (Use BottomSheetDialog for bottom-half display)
         val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(context)
         
@@ -518,6 +519,11 @@ class MangaOcrManager(private val webView: WebView) {
         
         // 配置 BottomSheet 行为，设置默认高度为 70% (Configure behavior, set peek height to 70%)
         dialog.behavior.peekHeight = (context.resources.displayMetrics.heightPixels * 0.7).toInt()
+
+        // --- 监听对话框关闭 (Listen for dialog dismiss) ---
+        dialog.setOnDismissListener {
+            onDismiss?.invoke()
+        }
         
         // 监听物理返回键以支持网页回退 (Listen for back key to support web navigation)
         webViewContainer.setOnKeyListener { _, keyCode, event ->
@@ -572,8 +578,16 @@ class MangaOcrManager(private val webView: WebView) {
                             else -> ""
                         }
                         if (url.isNotEmpty()) {
-                            showWebViewDialog(context, url) // 使用应用内浏览 (Use in-app browsing)
+                            // --- 修改：传入回调以在 WebView 关闭后重新显示详情对话框 ---
+                            showWebViewDialog(context, url) {
+                                showWordDetailDialog(context, word, sourceSentence)
+                            }
                         }
+                    }
+                    // ---【核心修复】：监听取消事件 (Listen for cancel event) ---
+                    // 如果用户没有选择任何搜索引擎直接返回，也重新显示详情对话框
+                    .setOnCancelListener {
+                        showWordDetailDialog(context, word, sourceSentence)
                     }
                     .show()
             }
