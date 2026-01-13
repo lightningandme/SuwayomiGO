@@ -563,15 +563,15 @@ class MangaOcrManager(private val webView: WebView) {
                 dialog.dismiss()
             }
             .setNeutralButton("Web搜索") { _, _ ->
-                val options = arrayOf("Weblio (日中)","Kotobank (日日)", "Jisho (日英)", "Massif (例句)", "Google 搜索")
+                val options = arrayOf("Kotobank (日日)","Kotobank (日中)", "Jisho (日英)", "Massif (例句)", "Google 搜索")
                 val query = try { URLEncoder.encode(word.baseForm, "UTF-8") } catch (_: Exception) { word.baseForm }
 
                 android.app.AlertDialog.Builder(context)
                     .setTitle("选择搜索引擎")
                     .setItems(options) { _, which ->
                         val url = when (which) {
-                            0 -> "https://cjjc.weblio.jp/content/$query"
-                            1 -> "https://kotobank.jp/word/$query"
+                            0 -> "https://kotobank.jp/word/$query"
+                            1 -> "https://kotobank.jp/search?q=$query&t=jz"
                             2 -> "https://jisho.org/search/$query"
                             3 -> "https://massif.la/ja/search?q=$query"
                             4 -> "https://www.google.com/search?q=$query+意味"
