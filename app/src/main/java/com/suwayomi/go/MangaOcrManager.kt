@@ -625,7 +625,7 @@ class MangaOcrManager(private val webView: WebView) {
                 return
             }
             val deckName = "SuwayomiGO"
-            val modelName = "SuwayomiGO_Dict_v1"
+            val modelName = "SuwayomiGO_Dict_v1.1"
             val fields = arrayOf("单词", "读音", "释义", "原句", "来源")
             val fullTitle = webView.title ?: ""
             val mangaName = fullTitle.substringBefore(" - Suwayomi")
@@ -639,15 +639,22 @@ class MangaOcrManager(private val webView: WebView) {
                 modelName, fields, arrayOf("Card 1"),
                 // 1. 正面模板 (Front): 单词居中 (Centered Word)
                 arrayOf("""
-            <div style='text-align:center; font-size:35px; color:#3581b2; font-weight:bold; margin-top:20px;'>
+            <div style='text-align:center; font-size:40px; color:#3581b2; font-weight:bold; margin-top:20px;'>
                 {{单词}}
             </div>
         """.trimIndent()),
                 // 2. 背面模板 (Back): 布局微调 (Layout adjustment)
                 arrayOf("""
             <div style='text-align:center;'>
-                <div style='font-size:35px; color:#3581b2; font-weight:bold;'>{{单词}}</div>
-                <div style='font-size:20px; color:#252743; margin-bottom:10px;'>【{{读音}}】</div>
+                <div style='font-size:40px; color:#3581b2; font-weight:bold;'>{{单词}}</div>
+        
+                <div style='display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom:10px;'>
+                    <div style='font-size:25px; color:#252743;'>{{读音}}</div>
+            
+                    <div style='cursor: pointer;'>
+                        {{tts ja_JP:单词}}
+                    </div>
+                </div>
             </div>
             
             <hr>
