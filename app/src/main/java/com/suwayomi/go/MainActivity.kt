@@ -432,8 +432,18 @@ class MainActivity : AppCompatActivity() {
                         return@setOnTouchListener true
                     }
 
+                    // 计算滑动手势持续时间与 X 轴滑动速度 (Calculate duration and X-axis velocity)
+                    val duration = event.eventTime - event.downTime
+                    val velocityX = if (duration > 0) absDeltaX / duration else 0f
+
                     // 检测左右滑动手势映射为方向键翻页
-                    if (isChapterPage && isOcrEnabled && absDeltaX > 300 && absDeltaX > absDeltaY * 1.5) {
+                    // 逻辑优化：将 300 的固定阈值放宽。
+                    // 满足以下任一条件即可触发：
+                    // 1. 慢速滑动但位移超过 150 像素 (Slow swipe but distance > 150px)
+                    // 2. 快速滑动（速度 > 0.5 像素/毫秒）且位移超过 80 像素 (Fast flick > 0.5px/ms and distance > 80px)
+                    val isSwipeTriggered = (absDeltaX > 150) || (velocityX > 0.5f && absDeltaX > 80)
+
+                    if (isChapterPage && isOcrEnabled && isSwipeTriggered && absDeltaX > absDeltaY * 1.5) {
                         if (deltaX > 0) {
                             simulateKey("ArrowLeft", 37)
                         } else {
