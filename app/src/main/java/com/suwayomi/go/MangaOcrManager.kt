@@ -200,7 +200,7 @@ class MangaOcrManager(private val webView: WebView) {
 
         val clickY = (top + bottom) / 2
         // 根据需求：relX, relY 均为 0，clickY 为矩形中心 Y 坐标 (relX, relY are 0, clickY is center Y)
-        sendToOcrServer(base64String, 0, 0, clickY)
+        sendToOcrServer(base64Image = base64String, relX = 0, relY = 0, absClickY = clickY)
     }
 
     @SuppressLint("DirectSystemCurrentTimeMillisUsage")
@@ -535,6 +535,10 @@ class MangaOcrManager(private val webView: WebView) {
             }
         }
 
+        // --- 修改：应用约束以取消背景变暗和动画 (Apply constraints to remove dim and animation) ---
+        // 注意：BottomSheetDialog 已经在外部限制了 View 的高度且自带底部对齐逻辑，此处传 false 避免冲突导致居中
+        applyDialogConstraints(dialog, limitHeight = false)
+
         dialog.show()
     }
 
@@ -607,14 +611,17 @@ class MangaOcrManager(private val webView: WebView) {
      * 辅助函数：取消对话框背景变暗，限制最大高度为屏幕的 70%，并取消显示动画
      * 使用 OnPreDrawListener 在绘制前拦截并修改尺寸，实现无感约束。
      * (Helper function: Remove dim, limit max height to 70%, and disable animations seamlessly)
+     * @param limitHeight 是否启用高度限制逻辑。对于已经通过 View 限制了高度的弹窗（如 BottomSheet），应传 false。
      */
-    private fun applyDialogConstraints(dialog: android.app.Dialog) {
+    private fun applyDialogConstraints(dialog: android.app.Dialog, limitHeight: Boolean = true) {
         val window = dialog.window ?: return
         
         // 1. 在 show() 之前清除变暗和设置动画为 0 (Clear dim and set animations to 0 before show)
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window.setWindowAnimations(0)
         window.attributes.windowAnimations = 0
+
+        if (!limitHeight) return // 跳过高度限制逻辑，避免干扰 BottomSheet 的底部对齐
 
         val screenHeight = dialog.context.resources.displayMetrics.heightPixels
         val maxHeight = (screenHeight * 0.7).toInt()
