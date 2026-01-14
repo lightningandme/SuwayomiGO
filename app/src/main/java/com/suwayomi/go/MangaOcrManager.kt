@@ -18,6 +18,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.animation.AnimationUtils
 import android.webkit.WebView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -213,6 +214,18 @@ class MangaOcrManager(private val webView: WebView) {
             return
         }
 
+        // --- 视觉反馈：变色体现正在处理 (Visual Feedback: Color change to indicate processing) ---
+        val context = webView.context
+        val activity = context as? Activity
+        val ocrIndicator = activity?.findViewById<View>(R.id.ocrIndicator)
+
+        Handler(Looper.getMainLooper()).post {
+            ocrIndicator?.let {
+                // 将图标变为深色以体现“正在加载/处理”的状态 (Change icon to dark color to reflect processing state)
+                it.background?.mutate()?.setTint("#881144".toColorInt())
+            }
+        }
+
         val fullTitle = webView.title ?: ""
         val mangaName = fullTitle.substringBefore(" - Suwayomi")
 
@@ -223,6 +236,8 @@ class MangaOcrManager(private val webView: WebView) {
 
         if (ocrUrl.isEmpty()) {
             Handler(Looper.getMainLooper()).post {
+                // 恢复原色 (Restore original color)
+                ocrIndicator?.background?.mutate()?.setTint("#3581b2".toColorInt())
                 Toast.makeText(webView.context, "请先配置 OCR 地址", Toast.LENGTH_LONG).show()
             }
             return
@@ -236,7 +251,7 @@ class MangaOcrManager(private val webView: WebView) {
         }.toString()
 
         val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
-        
+
         try {
             lastRequestTime = currentTime
 
@@ -248,7 +263,15 @@ class MangaOcrManager(private val webView: WebView) {
                 .build()
             // ------------------------------
             client.newCall(request).enqueue(object : Callback {
+                private fun stopVisualFeedback() {
+                    Handler(Looper.getMainLooper()).post {
+                        // 结束处理，恢复原本的蓝色 (Processing ended, restore original blue)
+                        ocrIndicator?.background?.mutate()?.setTint("#3581b2".toColorInt())
+                    }
+                }
+
                 override fun onResponse(call: Call, response: Response) {
+                    stopVisualFeedback()
                     response.use {
                         // 增加对 401 错误的处理 (Handle 401 Unauthorized)
                         if (response.code == 401) {
@@ -270,10 +293,12 @@ class MangaOcrManager(private val webView: WebView) {
                     }
                 }
                 override fun onFailure(call: Call, e: IOException) {
+                    stopVisualFeedback()
                     Log.e("MangaOcr", "Network error: ${e.message}")
                 }
             })
         } catch (e: Exception) {
+            ocrIndicator?.background?.mutate()?.setTint("#3581b2".toColorInt())
             Log.e("MangaOcr", "Request error: ${e.message}")
         }
     }
@@ -288,7 +313,7 @@ class MangaOcrManager(private val webView: WebView) {
     private fun showResultBottomSheet(result: OcrResponse, absClickY: Int) {
         Handler(Looper.getMainLooper()).post {
             val context = webView.context
-            
+
             val dialog = object : android.app.Dialog(context) {
                 override fun dispatchKeyEvent(event: KeyEvent): Boolean {
                     val keyCode = event.keyCode
@@ -298,7 +323,7 @@ class MangaOcrManager(private val webView: WebView) {
                         if (event.action == KeyEvent.ACTION_UP) {
                             this.dismiss()
                         }
-                        return true 
+                        return true
                     }
                     return super.dispatchKeyEvent(event)
                 }
@@ -361,7 +386,7 @@ class MangaOcrManager(private val webView: WebView) {
             val displayMetrics = context.resources.displayMetrics
             val screenHeight = displayMetrics.heightPixels
             val screenWidth = displayMetrics.widthPixels
-            
+
             view.measure(
                 View.MeasureSpec.makeMeasureSpec(screenWidth, View.MeasureSpec.AT_MOST),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
@@ -372,7 +397,7 @@ class MangaOcrManager(private val webView: WebView) {
 
             dialog.window?.let { window ->
                 window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                window.setWindowAnimations(0) 
+                window.setWindowAnimations(0)
                 window.attributes.windowAnimations = 0
                 window.setBackgroundDrawableResource(android.R.color.transparent)
                 window.decorView.setPadding(0, 0, 0, 0)
@@ -420,7 +445,7 @@ class MangaOcrManager(private val webView: WebView) {
                         MotionEvent.ACTION_MOVE -> {
                             params.x = (dragState.x + (event.rawX - dragState.touchX)).toInt()
                             params.y = (dragState.y + (event.rawY - dragState.touchY)).toInt()
-                            window.attributes = params 
+                            window.attributes = params
                             true
                         }
                         else -> false
@@ -482,16 +507,16 @@ class MangaOcrManager(private val webView: WebView) {
     private fun showWebViewDialog(context: Context, url: String, onDismiss: (() -> Unit)? = null) {
         // 使用 BottomSheetDialog 实现下半屏显示 (Use BottomSheetDialog for bottom-half display)
         val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(context)
-        
+
         val webViewContainer = WebView(context).apply {
             // 设置初始高度为屏幕的 70% (Set initial height to 70% of screen)
             val screenHeight = context.resources.displayMetrics.heightPixels
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (screenHeight * 0.7).toInt())
-            
+
             settings.javaScriptEnabled = true // 启用 JavaScript (Enable JavaScript)
             settings.domStorageEnabled = true // 启用 DOM 存储 (Enable DOM Storage)
             // 确保点击网页链接时仍在当前 WebView 中打开 (Ensure links open within current WebView)
-            webViewClient = android.webkit.WebViewClient() 
+            webViewClient = android.webkit.WebViewClient()
             loadUrl(url)
 
             // ---【核心修复】：解决滑动冲突 (Fix scrolling conflict) ---
@@ -516,7 +541,7 @@ class MangaOcrManager(private val webView: WebView) {
         }
 
         dialog.setContentView(webViewContainer)
-        
+
         // 配置 BottomSheet 行为，设置默认高度为 70% (Configure behavior, set peek height to 70%)
         dialog.behavior.peekHeight = (context.resources.displayMetrics.heightPixels * 0.7).toInt()
 
@@ -524,7 +549,7 @@ class MangaOcrManager(private val webView: WebView) {
         dialog.setOnDismissListener {
             onDismiss?.invoke()
         }
-        
+
         // 监听物理返回键以支持网页回退 (Listen for back key to support web navigation)
         webViewContainer.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP && webViewContainer.canGoBack()) {
@@ -593,14 +618,14 @@ class MangaOcrManager(private val webView: WebView) {
                     .setOnCancelListener {
                         showWordDetailDialog(context, word, sourceSentence)
                     }
-                
+
                 // 修改：先 create 再应用约束，最后 show，避免跳动
                 val searchDialog = searchBuilder.create()
                 applyDialogConstraints(searchDialog)
                 searchDialog.show()
             }
             .setNegativeButton("关闭", null)
-        
+
         // 修改：先 create 再应用约束，最后 show，避免高度跳动动画
         val detailDialog = builder.create()
         applyDialogConstraints(detailDialog)
@@ -615,7 +640,7 @@ class MangaOcrManager(private val webView: WebView) {
      */
     private fun applyDialogConstraints(dialog: android.app.Dialog, limitHeight: Boolean = true) {
         val window = dialog.window ?: return
-        
+
         // 1. 在 show() 之前清除变暗和设置动画为 0 (Clear dim and set animations to 0 before show)
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window.setWindowAnimations(0)
