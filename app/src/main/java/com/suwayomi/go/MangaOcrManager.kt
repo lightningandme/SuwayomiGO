@@ -18,7 +18,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.view.animation.AnimationUtils
 import android.webkit.WebView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -560,9 +559,10 @@ class MangaOcrManager(private val webView: WebView) {
             }
         }
 
-        // --- 修改：应用约束以取消背景变暗和动画 (Apply constraints to remove dim and animation) ---
+        // --- 修改：应用约束以取消背景变暗，并恢复弹出动画 (Apply constraints to remove dim and restore animation) ---
         // 注意：BottomSheetDialog 已经在外部限制了 View 的高度且自带底部对齐逻辑，此处传 false 避免冲突导致居中
-        applyDialogConstraints(dialog, limitHeight = false)
+        // 传入 disableAnimation = false 以恢复 BottomSheet 的弹出动画 (Pass disableAnimation = false to restore BottomSheet's animation)
+        applyDialogConstraints(dialog, limitHeight = false, disableAnimation = false)
 
         dialog.show()
     }
@@ -633,25 +633,30 @@ class MangaOcrManager(private val webView: WebView) {
     }
 
     /**
-     * 辅助函数：取消对话框背景变暗，限制最大高度为屏幕的 70%，并取消显示动画
+     * 辅助函数：取消对话框背景变暗，限制最大高度为屏幕的 70%，并可选地取消显示动画
      * 使用 OnPreDrawListener 在绘制前拦截并修改尺寸，实现无感约束。
-     * (Helper function: Remove dim, limit max height to 70%, and disable animations seamlessly)
+     * (Helper function: Remove dim, limit max height to 70%, and optionally disable animations)
      * @param limitHeight 是否启用高度限制逻辑。对于已经通过 View 限制了高度的弹窗（如 BottomSheet），应传 false。
+     * @param disableAnimation 是否禁用动画。默认为 true (禁用)，若需保留动画 (如 BottomSheet 弹出) 请传 false。
      */
-    private fun applyDialogConstraints(dialog: android.app.Dialog, limitHeight: Boolean = true) {
+    private fun applyDialogConstraints(dialog: android.app.Dialog, limitHeight: Boolean = true, disableAnimation: Boolean = true) {
         val window = dialog.window ?: return
 
-        // 1. 在 show() 之前清除变暗和设置动画为 0 (Clear dim and set animations to 0 before show)
+        // 1. 在 show() 之前清除变暗 (Clear dim before show)
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        window.setWindowAnimations(0)
-        window.attributes.windowAnimations = 0
+
+        // 2. 如果需要，禁用动画 (Disable animation if requested)
+        if (disableAnimation) {
+            window.setWindowAnimations(0)
+            window.attributes.windowAnimations = 0
+        }
 
         if (!limitHeight) return // 跳过高度限制逻辑，避免干扰 BottomSheet 的底部对齐
 
         val screenHeight = dialog.context.resources.displayMetrics.heightPixels
         val maxHeight = (screenHeight * 0.7).toInt()
 
-        // 2. 使用 OnPreDrawListener 实现无跳动高度限制 (Use OnPreDrawListener for seamless height limit)
+        // 3. 使用 OnPreDrawListener 实现无跳动高度限制 (Use OnPreDrawListener for seamless height limit)
         window.decorView.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
             override fun onPreDraw(): Boolean {
                 val currentHeight = window.decorView.height
