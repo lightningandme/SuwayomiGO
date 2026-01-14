@@ -53,4 +53,6 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    implementation(libs.okhttp)
+    implementation("com.github.ankidroid:Anki-Android:api-v1.1.0")
 }
