@@ -555,7 +555,7 @@ class MangaOcrManager(private val webView: WebView) {
             message.append("(本地词典未收录此词，请点击下方按钮去Web搜索)")
         }
 
-        android.app.AlertDialog.Builder(context)
+        val builder = android.app.AlertDialog.Builder(context)
             .setTitle(word.baseForm) // 标题显示原型
             .setMessage(message.toString())
             .setPositiveButton("存入 Anki") { dialog, _ ->
@@ -566,7 +566,7 @@ class MangaOcrManager(private val webView: WebView) {
                 val options = arrayOf("Kotobank (日日)","Kotobank (日中)", "Jisho (日英)", "Massif (例句)", "Google 搜索")
                 val query = try { URLEncoder.encode(word.baseForm, "UTF-8") } catch (_: Exception) { word.baseForm }
 
-                android.app.AlertDialog.Builder(context)
+                val searchBuilder = android.app.AlertDialog.Builder(context)
                     .setTitle("选择搜索引擎")
                     .setItems(options) { _, which ->
                         val url = when (which) {
@@ -589,10 +589,54 @@ class MangaOcrManager(private val webView: WebView) {
                     .setOnCancelListener {
                         showWordDetailDialog(context, word, sourceSentence)
                     }
-                    .show()
+                
+                // 修改：先 create 再应用约束，最后 show，避免跳动
+                val searchDialog = searchBuilder.create()
+                applyDialogConstraints(searchDialog)
+                searchDialog.show()
             }
             .setNegativeButton("关闭", null)
-            .show()
+        
+        // 修改：先 create 再应用约束，最后 show，避免高度跳动动画
+        val detailDialog = builder.create()
+        applyDialogConstraints(detailDialog)
+        detailDialog.show()
+    }
+
+    /**
+     * 辅助函数：取消对话框背景变暗，限制最大高度为屏幕的 70%，并取消显示动画
+     * 使用 OnPreDrawListener 在绘制前拦截并修改尺寸，实现无感约束。
+     * (Helper function: Remove dim, limit max height to 70%, and disable animations seamlessly)
+     */
+    private fun applyDialogConstraints(dialog: android.app.Dialog) {
+        val window = dialog.window ?: return
+        
+        // 1. 在 show() 之前清除变暗和设置动画为 0 (Clear dim and set animations to 0 before show)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        window.setWindowAnimations(0)
+        window.attributes.windowAnimations = 0
+
+        val screenHeight = dialog.context.resources.displayMetrics.heightPixels
+        val maxHeight = (screenHeight * 0.7).toInt()
+
+        // 2. 使用 OnPreDrawListener 实现无跳动高度限制 (Use OnPreDrawListener for seamless height limit)
+        window.decorView.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                val currentHeight = window.decorView.height
+                if (currentHeight > 0) {
+                    if (currentHeight > maxHeight) {
+                        // 发现高度超限，立即修改 LayoutParams 并请求重新布局，但不绘制这一帧
+                        val params = window.attributes
+                        params.height = maxHeight
+                        window.attributes = params
+                        return false // 返回 false 意味着这一帧不绘制，直接进入下一轮 Layout
+                    }
+                    // 尺寸正确后移除监听器 (Remove listener once size is correct)
+                    window.decorView.viewTreeObserver.removeOnPreDrawListener(this)
+                }
+                return true
+            }
+        })
     }
 
     private fun exportToAnki(context: Context, word: JapaneseWord, sourceSentence: String) {
