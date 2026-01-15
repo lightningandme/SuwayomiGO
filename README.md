@@ -19,5 +19,6 @@ SuwayomiGO 是一个轻量化的安卓漫画阅读器。它需要搭配漫画服
 
 ## 🔍️ 简单演示
 ![demo1](demo/demo1_login.gif)
-
+![demo2](demo/demo2_search.gif)
+![demo3](demo/demo3_anki.gif)
 ## 📘 快速开始
