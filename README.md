@@ -18,7 +18,12 @@ SuwayomiGO 是一个轻量化的安卓漫画阅读器。它需要搭配漫画服
 - 🔬 **更多功能酝酿中...**
 
 ## 🔍️ 简单演示
-![demo1](demo/demo1_login.gif)
 ![demo2](demo/demo2_search.gif)
 ![demo3](demo/demo3_anki.gif)
+
 ## 📘 快速开始
+0、准备工作：你需要一台能保持开机的电脑和一部不太旧的安卓设备。\
+1、前往Suwayomi-Server的 [发布页](https://github.com/Suwayomi/Suwayomi-Server/releases)
+下载适合你电脑系统的服务器安装包，新手建议选择Windows上手，家里有NAS的可自行docker部署。\
+2、以Windows服务器为例，首先添加漫画源
+https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json 点击启动。
