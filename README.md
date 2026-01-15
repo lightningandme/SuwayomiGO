@@ -39,7 +39,7 @@ https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json 点�
 ### Level2
 如果你想激活阅读器的日语查词与AI翻译功能，你需要以下步骤：\
 0、准备工作：你需要准备一个大模型的API，新手入门建议去 [deepseek开放平台](https://platform.deepseek.com/) 先充值10元后，创建API key使用。\
-1、前往Manga-OCR-Server的 [发布页](https://github.com/lightningandme/Manga-OCR-Server) 下载一键安装包，或自行使用python环境运行，具体参见项目说明页。\
+1、前往 [Manga-OCR-Server](https://github.com/lightningandme/Manga-OCR-Server) 下载一键安装包，或自行使用python环境运行，具体参见项目说明页。\
 2、OCR服务器准备就绪后，在SuwayomiGO客户端更多设置中填写OCR服务器地址和令牌，连接成功后点击保存。\
 3、OCR模式打开方式为在漫画页面[大幅度下拉]或[长按音量+]。\
 4、在OCR模式下，点按气泡、圈选文字均可查词，左右滑动可翻页，可参见简单演示中的动图。
