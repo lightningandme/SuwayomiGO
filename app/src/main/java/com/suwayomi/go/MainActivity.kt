@@ -427,7 +427,7 @@ class MainActivity : AppCompatActivity() {
                     val screenHeight = resources.displayMetrics.heightPixels
                     if (isChapterPage && deltaY > screenHeight * 0.6 && absDeltaY > absDeltaX * 1.5) {
                         setOcrEnabled(!isOcrEnabled)
-                        val statusText = if (isOcrEnabled) "OCR 模式已开启" else "OCR 模式已关闭"
+                        val statusText = if (isOcrEnabled) "OCR 模式已开启\n点按气泡、圈选文字均可查词" else "OCR 模式已关闭"
                         Toast.makeText(this, statusText, Toast.LENGTH_LONG).show()
                         return@setOnTouchListener true
                     }
@@ -783,28 +783,28 @@ class MainActivity : AppCompatActivity() {
                                 // 1. 认证成功：服务器返回 200 OK
                                 if (response.isSuccessful) {
                                     editOcrUrl.setText(baseUrl)
-                                    Toast.makeText(this@MainActivity, "✅ 令牌认证成功！", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this@MainActivity, "令牌认证成功！", Toast.LENGTH_LONG).show()
                                 } else {
                                     // 2. 认证失败：根据状态码给出精准反馈
                                     when (response.code) {
                                         401 -> {
                                             // 对应 FastAPI 中的 HTTPException(status_code=401)
-                                            Toast.makeText(this@MainActivity, "❌ 令牌错误 (Unauthorized)", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(this@MainActivity, "令牌错误 (Unauthorized)", Toast.LENGTH_SHORT).show()
                                         }
                                         404 -> {
                                             // 路径不对，可能没加 /health 或者后端没定义这个接口
-                                            Toast.makeText(this@MainActivity, "❓ 接口不存在 (404 Not Found)", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(this@MainActivity, "接口不存在 (404 Not Found)", Toast.LENGTH_SHORT).show()
                                         }
                                         403 -> {
                                             // 某些代理或防火墙可能会拦截并返回 403
-                                            Toast.makeText(this@MainActivity, "🚫 访问被拒绝 (403 Forbidden)", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(this@MainActivity, "访问被拒绝 (403 Forbidden)", Toast.LENGTH_SHORT).show()
                                         }
                                         else -> {
                                             // 其他错误则尝试 HTTPS 降级或报错
                                             if (fallbackToHttps) {
                                                 performTest("https://$rawInput", false)
                                             } else {
-                                                Toast.makeText(this@MainActivity, "⚠️ 服务器响应错误: ${response.code}", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(this@MainActivity, "服务器响应错误: ${response.code}", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     }
@@ -871,7 +871,7 @@ class MainActivity : AppCompatActivity() {
                 KeyEvent.KEYCODE_VOLUME_UP -> {
                     isLongPressHandled = true
                     setOcrEnabled(!isOcrEnabled)
-                    val statusText = if (isOcrEnabled) "OCR 模式已开启" else "OCR 模式已关闭"
+                    val statusText = if (isOcrEnabled) "OCR 模式已开启\n点按气泡、圈选文字均可查词" else "OCR 模式已关闭"
                     Toast.makeText(this, statusText, Toast.LENGTH_LONG).show()
                     return true
                 }

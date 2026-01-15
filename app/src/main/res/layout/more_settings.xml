@@ -92,6 +92,17 @@
                 android:text="测试连接"
                 android:textColor="#3581b2"
                 tools:ignore="HardcodedText" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="使用说明：\nOCR模式打开方式为在漫画页面[大幅度下拉]或[长按音量+]\n在OCR模式下，点按气泡、圈选文字均可查词，左右滑动可翻页"
+                android:textSize="10sp"
+                android:textColor="#3581b2"
+                android:textStyle="bold"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="8dp"
+                tools:ignore="HardcodedText" />
             
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
