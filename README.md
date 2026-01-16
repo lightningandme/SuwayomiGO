@@ -39,7 +39,7 @@
 ### 🛠️ 第一阶段：搭建基础阅读环境 (Level 1)
 
 1. **准备服务器**：下载并运行 [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server/releases)（Windows 用户推荐一键安装包），可在漫画网页的 **Settings-Appearance-Language** 里设置中文。
-2. **添加图源**：在 **设置-浏览-扩展源** 中添加 `https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json` 等插件仓库，打开 **浏览-插件**，点击页面右上角日语筛选，搜索并添加Rawkuma、KissLove等生肉图源）。更多有关Suwayomi的基本操作，可参考 [这个教程](https://ivonblog.com/posts/suwayomi-tachidesk/) 。
+2. **添加图源**：在 **设置-浏览-扩展源** 中添加 `https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json` 等插件仓库，在 **浏览-插件** 中，点击右上角设置并打开日语筛选，搜索并添加Rawkuma、KissLove等生肉图源）。更多有关Suwayomi的基本操作，可参考 [这个教程](https://ivonblog.com/posts/suwayomi-tachidesk/) 。
 3. **安装客户端**：下载本项目的 [最新 APK](https://github.com/lightningandme/SuwayomiGO/releases) 。
 4. **连接配置**：
     - 确保手机与电脑在**同一局域网**。
