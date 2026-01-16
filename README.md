@@ -39,8 +39,8 @@
 ### 🛠️ 第一阶段：搭建基础阅读环境 (Level 1)
 
 1. **准备服务器**：下载并运行 [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server/releases)（Windows 用户推荐一键安装包）。
-2. **添加图源**：在 Server 端设置中添加 [Keiyoushi 扩展源](https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json) 并安装你喜欢的图源。
-3. **安装客户端**：下载本项目的 [最新 APK](https://github.com/lightningandme/SuwayomiGO/releases)。
+2. **添加图源**：在 Server 端设置中添加 [Keiyoushi 扩展源](https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json) 并安装你喜欢的图源。有关Suwayomi的基本操作，可参考 [这个教程](https://ivonblog.com/posts/suwayomi-tachidesk/) 。
+3. **安装客户端**：下载本项目的 [最新 APK](https://github.com/lightningandme/SuwayomiGO/releases) 。
 4. **连接配置**：
     - 确保手机与电脑在**同一局域网**。
     - 输入服务器 IP（如 `192.168.1.5:4567`）。
