@@ -89,4 +89,10 @@
 - **鸣谢**：感谢 [Suwayomi](https://github.com/Suwayomi) 提供的强大后端支持。
 
 ---
+
+## ⭐ Star History
+[![Star History Chart](https://api.star-history.com/svg?repos=lightningandme/SuwayomiGO&type=date&legend=top-left)](https://www.star-history.com/#lightningandme/SuwayomiGO&type=date&legend=top-left)
+
+---
+
 <p align="center">Made with ❤️ for Manga Lovers</p>
