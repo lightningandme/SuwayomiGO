@@ -311,6 +311,23 @@ class MainActivity : AppCompatActivity() {
                 // 核心修改：在页面加载完成时再次确认下拉刷新的启用状态 (Re-verify swipe refresh state on page finish)
                 val isChapterPage = url?.contains("chapter") == true
                 swipeRefresh.isEnabled = webView.scrollY == 0 && !isChapterPage
+
+                // 核心：当页面加载完成，尝试获取每一页的数据
+                val ids = parseMangaUrl(url)
+                if (ids != null) {
+                    val (mangaId, chapterId) = ids
+                    // 假设 Suwayomi 每次加载时，DOM 里已经有图片了。
+                    // 我们可以尝试预取前几页的数据 (0, 1, 2...)
+                    // 或者更激进一点，循环预取前 5 页？或者等待用户点击时再 fetch (会慢)。
+                    // 建议：预取第 1 页 (page 0 -> index 1)
+                    ocrManager.fetchChapterData(mangaId, chapterId, 1)
+
+                    // 如果是长条漫，可能需要循环 fetch。这里先演示 fetch 第1页。
+                    // 你也可以搞一个循环：
+                    for (i in 1..5) {
+                        ocrManager.fetchChapterData(mangaId, chapterId, i)
+                    }
+                }
             }
 
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
@@ -455,7 +472,13 @@ class MainActivity : AppCompatActivity() {
                     // OCR 识别逻辑：优先交给 ocrManager 处理手势序列 (Identify closed loop or click)
                     if (isChapterPage && isOcrEnabled) {
                         touchPoints.add(PointF(event.x, event.y))
-                        if (ocrManager.processTouchPoints(touchPoints)) {
+                        // 解析当前页面的 ID 信息
+                        val ids = parseMangaUrl(webView.url)
+                        val mId = ids?.first ?: -1
+                        val cId = ids?.second ?: -1
+
+                        // 调用修改后的 processTouchPoints
+                        if (ocrManager.processTouchPoints(touchPoints, mId, cId)) {
                             return@setOnTouchListener true
                         }
                     }
@@ -1020,5 +1043,37 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    // 解析 URL 获取 MangaID 和 ChapterID
+    private fun parseMangaUrl(url: String?): Pair<Int, Int>? {
+        if (url == null) return null
+        // 匹配格式: .../manga/49/chapter/13...
+        val regex = "manga/(\\d+)/chapter/(\\d+)".toRegex()
+        val match = regex.find(url)
+        return if (match != null) {
+            val mangaId = match.groupValues[1].toInt()
+            val chapterId = match.groupValues[2].toInt()
+            Pair(mangaId, chapterId)
+        } else {
+            null
+        }
+    }
+
+    // 获取 Manga Name (用于 OCR 截图时的 fallback)
+    private fun getMangaNameFromTitle(): String {
+        val pageTitle = webView.title ?: ""
+        // 取 " - Suwayomi" 之前的部分
+        val fullTitle = pageTitle.substringBefore(" - Suwayomi")
+        // 如果标题包含冒号（如 "Title: Chapter 1"），通常我们要的是冒号前的部分作为书名
+        // 但如果书名本身带冒号，这可能有误判。根据你的需求，取最右边冒号还是最左边？
+        // 通常 "Manga Name: Chapter Title"，所以取 substringBeforeLast(":") 或者 substringBefore(":")
+        // 你的需求：截取从右边开始第一个':'前的字符 -> lastIndexOf
+        val lastColon = fullTitle.lastIndexOf(':')
+        return if (lastColon != -1) {
+            fullTitle.take(lastColon).trim()
+        } else {
+            fullTitle.trim()
+        }
     }
 }

@@ -118,10 +118,72 @@ class MangaOcrManager(private val webView: WebView) {
         sendToOcrServer(base64String, relX, relY, clickY)
     }
 
-    /**
-     * 处理触摸点序列，识别是点击还是闭合圈 (Process touch points, identify loop or click)
-     */
-    fun processTouchPoints(points: List<PointF>): Boolean {
+    private fun processRectCrop(rect: RectF) {
+        if (webView.width <= 0 || webView.height <= 0) return
+
+        val fullBitmap = createBitmap(webView.width, webView.height)
+        val canvas = Canvas(fullBitmap)
+        webView.draw(canvas)
+
+        val left = rect.left.toInt().coerceIn(0, webView.width - 1)
+        val top = rect.top.toInt().coerceIn(0, webView.height - 1)
+        val right = rect.right.toInt().coerceIn(left + 1, webView.width)
+        val bottom = rect.bottom.toInt().coerceIn(top + 1, webView.height)
+
+        val width = right - left
+        val height = bottom - top
+
+        val cropped = Bitmap.createBitmap(fullBitmap, left, top, width, height)
+        val base64String = bitmapToBase64(cropped)
+
+        val clickY = (top + bottom) / 2
+        // 根据需求：relX, relY 均为 0，clickY 为矩形中心 Y 坐标 (relX, relY are 0, clickY is center Y)
+        sendToOcrServer(base64Image = base64String, relX = 0, relY = 0, absClickY = clickY)
+    }
+
+
+    // --- 1. 获取预读数据 (Fetch Data) ---
+    fun fetchChapterData(mangaId: Int, chapterIdx: Int, pageIdx: Int) {
+        // 从 SharedPreferences 获取配置
+        val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+        val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
+        val secretKey = prefs.getString("ocr_secret_key", "") ?: ""
+
+        if (serverUrl.isEmpty()) return
+
+        // 构造 URL: pageIdx + 1 因为服务器通常从 1 开始计数，而 URL 解析可能是 0
+        // 但根据你在 MainActivity 的解析逻辑，如果解析出来是 0，传给服务器应该是 1
+        // 我们统一在 MainActivity 解析时处理好 "+1" 的逻辑，这里直接用
+        val url = "$serverUrl/api/v1/get_chapter_data?manga_id=$mangaId&chapter_idx=$chapterIdx&page_idx=$pageIdx"
+
+        Log.d("MangaOcr", "Fetching data: $url")
+
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("X-API-Key", secretKey) // 添加鉴权头
+            .get()
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("MangaOcr", "Fetch data failed: ${e.message}")
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.body?.string()?.let { json ->
+                    val data = ChapterDataParser.parse(json)
+                    if (data != null && data.items.isNotEmpty()) {
+                        val key = "${mangaId}_${chapterIdx}_${pageIdx}"
+                        MangaDataManager.updateData(key, data)
+                    }
+                }
+            }
+        })
+    }
+
+    // --- 2. 处理触摸序列 (MainActivity 调用此入口) ---
+    // 修改：接收 mangaId 和 chapterIdx
+    fun processTouchPoints(points: List<PointF>, mangaId: Int, chapterIdx: Int): Boolean {
         if (points.isEmpty()) return false
 
         // 优先识别闭合圈 (Prioritize identifying closed loop)
@@ -135,17 +197,108 @@ class MangaOcrManager(private val webView: WebView) {
             }
         }
 
-        // 识别点击 (Identify click)
+        // 识别点击
         val start = points.first()
         val end = points.last()
         val dist = hypot(start.x - end.x, start.y - end.y)
-        if (dist < 20) { // 20 像素以内的位移视为点击 (Displacement within 20px treated as click)
-            Log.d("MangaOcr", "检测到点按: (${start.x}, ${start.y})，启动常规切图...")
-            processCrop(start.x.toInt(), start.y.toInt())
+
+        if (dist < 20) {
+            // 识别为点击事件 -> 尝试智能匹配
+            Log.d("MangaOcr", "检测到点按: (${start.x}, ${start.y})")
+
+            // 尝试获取当前点击图片的 PageIdx
+            val pageIdx = detectPageIdxFromClick()
+
+            if (mangaId > 0 && chapterIdx > 0 && pageIdx > 0) {
+                // 如果 ID 齐全，尝试走本地数据匹配
+                handleTouchWithData(start.x, start.y, mangaId, chapterIdx, pageIdx)
+            } else {
+                // ID 不全，降级为普通截图
+                processCrop(start.x.toInt(), start.y.toInt())
+            }
             return true
         }
 
         return false
+    }
+
+    // 辅助：从 WebView 的 HitTestResult 获取当前点击图片的 Page Index
+    private fun detectPageIdxFromClick(): Int {
+        val result = webView.hitTestResult
+        if (result.type == WebView.HitTestResult.IMAGE_TYPE ||
+            result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+            val imageUrl = result.extra // e.g., .../page/0
+            if (!imageUrl.isNullOrEmpty()) {
+                // 正则提取 page/ 后面的数字
+                val regex = "page/(\\d+)".toRegex()
+                val match = regex.find(imageUrl)
+                if (match != null) {
+                    val rawIdx = match.groupValues[1].toIntOrNull() ?: 0
+                    return rawIdx + 1 // 转换为 1-based index (0 -> 1)
+                }
+            }
+        }
+        return -1
+    }
+
+    // --- 3. 核心：带数据的点击处理 ---
+    private fun handleTouchWithData(
+        touchX: Float,
+        touchY: Float,
+        mangaId: Int,
+        chapterIdx: Int,
+        pageIdx: Int
+    ) {
+        val key = "${mangaId}_${chapterIdx}_${pageIdx}"
+        val data = MangaDataManager.getData(key)
+
+        // 分支 A: 无本地数据 -> 截图
+        if (data == null) {
+            Log.d("MangaOcr", "Cache Miss ($key), fallback to crop.")
+            processCrop(touchX.toInt(), touchY.toInt())
+            return
+        }
+
+        // 分支 B: 坐标映射
+        val renderWidth = webView.width.toFloat()
+        val originalWidth = data.imgWidth.toFloat()
+
+        if (originalWidth <= 0) { // 防止除以0
+            processCrop(touchX.toInt(), touchY.toInt())
+            return
+        }
+
+        val scale = renderWidth / originalWidth
+        val mappedX = (touchX / scale).toInt()
+        val mappedY = ((touchY + webView.scrollY) / scale).toInt()
+
+        Log.d("MangaOcr", "Map: $touchX -> $mappedX (Scale: $scale)")
+
+        val hitItem = MangaDataManager.hitTest(mappedX, mappedY)
+
+        if (hitItem != null) {
+            // 命中 -> 显示对话框 (构造 OcrResponse 桥接过去)
+            val response = OcrResponse(
+                text = hitItem.text,
+                translation = hitItem.translation,
+                words = hitItem.words
+            )
+            // 这里我们用 touchY 作为弹窗显示的参考高度
+            Handler(Looper.getMainLooper()).post {
+                showResultBottomSheet(response, touchY.toInt())
+            }
+        } else {
+            // 未命中 -> 截图兜底
+            Log.d("MangaOcr", "Missed box, fallback to crop.")
+            processCrop(touchX.toInt(), touchY.toInt())
+        }
+    }
+
+    // --- 桥接函数：复用现有的 BottomSheet ---
+    private fun showTranslationDialog(text: String, translation: String, words: List<JapaneseWord>) {
+        val response = OcrResponse(text, translation, words)
+        // 这里的 Y 坐标只是为了定位弹窗，传 0 或者屏幕中间即可，或者传最近一次点击位置
+        showResultBottomSheet(response, 500)
     }
 
     private fun isClosedLoop(points: List<PointF>): Boolean {
@@ -180,28 +333,7 @@ class MangaOcrManager(private val webView: WebView) {
         return RectF(minX, minY, maxX, maxY)
     }
 
-    private fun processRectCrop(rect: RectF) {
-        if (webView.width <= 0 || webView.height <= 0) return
 
-        val fullBitmap = createBitmap(webView.width, webView.height)
-        val canvas = Canvas(fullBitmap)
-        webView.draw(canvas)
-
-        val left = rect.left.toInt().coerceIn(0, webView.width - 1)
-        val top = rect.top.toInt().coerceIn(0, webView.height - 1)
-        val right = rect.right.toInt().coerceIn(left + 1, webView.width)
-        val bottom = rect.bottom.toInt().coerceIn(top + 1, webView.height)
-
-        val width = right - left
-        val height = bottom - top
-
-        val cropped = Bitmap.createBitmap(fullBitmap, left, top, width, height)
-        val base64String = bitmapToBase64(cropped)
-
-        val clickY = (top + bottom) / 2
-        // 根据需求：relX, relY 均为 0，clickY 为矩形中心 Y 坐标 (relX, relY are 0, clickY is center Y)
-        sendToOcrServer(base64Image = base64String, relX = 0, relY = 0, absClickY = clickY)
-    }
 
     @SuppressLint("DirectSystemCurrentTimeMillisUsage")
     private fun sendToOcrServer(base64Image: String, relX: Int, relY: Int, absClickY: Int) {
