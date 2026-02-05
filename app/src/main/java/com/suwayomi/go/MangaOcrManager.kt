@@ -43,43 +43,6 @@ import kotlin.math.hypot
 /**
  * 专门处理漫画 OCR 逻辑的管理类 (Management class for Manga OCR logic)
  */
-data class JapaneseWord(
-    val surface: String,
-    val baseForm: String,
-    val pos: String,
-    val reading: String,
-    val definition: String // 新增字段
-)
-
-data class OcrResponse(
-    val text: String,
-    val translation: String,
-    val words: List<JapaneseWord>
-) {
-    companion object {
-        fun fromJson(jsonString: String): OcrResponse {
-            val json = JSONObject(jsonString)
-            val wordsArray = json.getJSONArray("words")
-            val wordList = mutableListOf<JapaneseWord>()
-            // 修改 OcrResponse 中的解析逻辑
-            for (i in 0 until wordsArray.length()) {
-                val w = wordsArray.getJSONObject(i)
-                wordList.add(JapaneseWord(
-                    w.optString("s"),
-                    w.optString("b"),
-                    w.optString("p"),
-                    w.optString("r"),
-                    w.optString("d") // 读取释义
-                ))
-            }
-            return OcrResponse(
-                text = json.optString("text"),
-                translation = json.optString("translation"),
-                words = wordList
-            )
-        }
-    }
-}
 
 class MangaOcrManager(private val webView: WebView) {
 
@@ -89,14 +52,14 @@ class MangaOcrManager(private val webView: WebView) {
     }).toInt()
     private val client = OkHttpClient()
     private var lastRequestTime: Long = 0
+    // 用于 Anki 导出时的来源记录
+    private var currentMangaName: String = ""
 
     // 在 MangaOcrManager 类顶部声明
     private val api: AddContentApi by lazy {
         AddContentApi(webView.context.applicationContext)
     }
-    /**
-     * 常规点按识别 (Regular click recognition)
-     */
+
     fun processCrop(clickX: Int, clickY: Int) {
         if (webView.width <= 0 || webView.height <= 0) return
 
@@ -183,8 +146,11 @@ class MangaOcrManager(private val webView: WebView) {
 
     // --- 2. 处理触摸序列 (MainActivity 调用此入口) ---
     // 修改：接收 mangaId 和 chapterIdx
-    fun processTouchPoints(points: List<PointF>, mangaId: Int, chapterIdx: Int): Boolean {
+    fun processTouchPoints(points: List<PointF>, mangaId: Int, chapterIdx: Int, mangaName: String): Boolean {
         if (points.isEmpty()) return false
+
+        // 更新当前的漫画名，供后续 Anki 导出使用
+        this.currentMangaName = mangaName
 
         // 优先识别闭合圈 (Prioritize identifying closed loop)
         if (isClosedLoop(points)) {
@@ -294,12 +260,6 @@ class MangaOcrManager(private val webView: WebView) {
         }
     }
 
-    // --- 桥接函数：复用现有的 BottomSheet ---
-    private fun showTranslationDialog(text: String, translation: String, words: List<JapaneseWord>) {
-        val response = OcrResponse(text, translation, words)
-        // 这里的 Y 坐标只是为了定位弹窗，传 0 或者屏幕中间即可，或者传最近一次点击位置
-        showResultBottomSheet(response, 500)
-    }
 
     private fun isClosedLoop(points: List<PointF>): Boolean {
         if (points.size < 10) return false
