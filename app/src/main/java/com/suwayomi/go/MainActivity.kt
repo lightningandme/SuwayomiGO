@@ -320,7 +320,7 @@ class MainActivity : AppCompatActivity() {
                     // 我们可以尝试预取前几页的数据 (0, 1, 2...)
                     // 或者更激进一点，循环预取前 5 页？或者等待用户点击时再 fetch (会慢)。
                     // 建议：预取第 1 页 (page 0 -> index 1)
-                    ocrManager.fetchChapterData(mangaId, chapterId, 1)
+                    //ocrManager.fetchChapterData(mangaId, chapterId, 1)
 
                     // 如果是长条漫，可能需要循环 fetch。这里先演示 fetch 第1页。
                     // 你也可以搞一个循环：
@@ -476,12 +476,15 @@ class MainActivity : AppCompatActivity() {
                         val ids = parseMangaUrl(webView.url)
                         val mId = ids?.first ?: -1
                         val cId = ids?.second ?: -1
+                        val mangaName = getMangaNameFromTitle()
 
                         // 调用修改后的 processTouchPoints
-                        if (ocrManager.processTouchPoints(touchPoints, mId, cId)) {
+                        if (ocrManager.processTouchPoints(touchPoints, mId, cId, mangaName)) {
+                            touchPoints.clear()
                             return@setOnTouchListener true
                         }
                     }
+                    touchPoints.clear()
                 }
             }
 
