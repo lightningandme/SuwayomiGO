@@ -312,21 +312,28 @@ class MainActivity : AppCompatActivity() {
                 val isChapterPage = url?.contains("chapter") == true
                 swipeRefresh.isEnabled = webView.scrollY == 0 && !isChapterPage
 
-                // 核心：当页面加载完成，尝试获取每一页的数据
+                // 核心：当页面加载完成，触发预读并尝试获取数据
                 val ids = parseMangaUrl(url)
-                if (ids != null) {
+                if (ids != null && isChapterPage) { // 确保是章节页面才触发
                     val (mangaId, chapterId) = ids
-                    // 假设 Suwayomi 每次加载时，DOM 里已经有图片了。
-                    // 我们可以尝试预取前几页的数据 (0, 1, 2...)
-                    // 或者更激进一点，循环预取前 5 页？或者等待用户点击时再 fetch (会慢)。
-                    // 建议：预取第 1 页 (page 0 -> index 1)
-                    //ocrManager.fetchChapterData(mangaId, chapterId, 1)
+                    val mangaName = getMangaNameFromTitle()
 
-                    // 如果是长条漫，可能需要循环 fetch。这里先演示 fetch 第1页。
-                    // 你也可以搞一个循环：
+                    // 1. 触发服务器端后台预读 (Trigger Server-side Preload)
+                    // 注意：这里传入当前的 url，让 Manager 自动提取 suwayomi 的 base_url
+                    ocrManager.triggerPreload(mangaId, chapterId, mangaName, url ?: "")
+
+                    // 2. 尝试获取前几页的数据
+                    // 由于预读是异步的，立刻 fetch 可能会拿空数据。
+                    // 但对于“已读章节”的回看，或者预读很快的情况，这样能立刻显示。
+                    // 用户翻页到后面时，因为预读已经在后台跑了，后续的 fetch (如果我们在翻页时没做)
+                    // 这里我们简单起见，先拉取前 5 页。
                     for (i in 1..5) {
                         ocrManager.fetchChapterData(mangaId, chapterId, i)
                     }
+
+                    // 进阶优化建议：
+                    // 你可以在 MangaOcrManager 里加一个定时器，每隔 5 秒轮询一次当前页的数据，直到拿到为止。
+                    // 但目前先这样，只要用户稍微读慢一点，翻到第 2 页时，数据可能就有了。
                 }
             }
 

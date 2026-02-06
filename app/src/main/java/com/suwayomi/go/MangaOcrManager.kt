@@ -39,6 +39,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.URLEncoder
 import kotlin.math.hypot
+import androidx.core.net.toUri
 
 /**
  * 专门处理漫画 OCR 逻辑的管理类 (Management class for Manga OCR logic)
@@ -104,6 +105,74 @@ class MangaOcrManager(private val webView: WebView) {
         sendToOcrServer(base64Image = base64String, relX = 0, relY = 0, absClickY = clickY)
     }
 
+    // --- 新增：触发服务器后台预读 (Trigger Preload) ---
+    fun triggerPreload(
+        mangaId: Int,
+        chapterIdx: Int,
+        mangaName: String,
+        currentUrl: String // 需要传入当前的 URL 来提取 BaseUrl
+    ) {
+        val prefs = webView.context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+        val serverUrl = prefs.getString("ocr_server_url", "") ?: ""
+        val secretKey = prefs.getString("ocr_secret_key", "") ?: ""
+
+        // 获取 Suwayomi 的配置 (用于传给 OCR 服务器去下载图片)
+        val suwayomiUser = prefs.getString("user", "") ?: ""
+        val suwayomiPass = prefs.getString("pass", "") ?: ""
+        // Suwayomi Base URL 通常是当前页面 URL 的根路径
+        // 简单的提取逻辑：取 http://IP:PORT 部分
+        val suwayomiBaseUrl0 = extractBaseUrl(currentUrl)
+
+        if (serverUrl.isEmpty() || suwayomiBaseUrl0.isEmpty()) return
+
+        val preloadUrl = "$serverUrl/api/v1/preload"
+        val suwayomiBaseUrl = "$suwayomiBaseUrl0/api/v1"
+
+        // 构建 JSON Body
+        val jsonBody = JSONObject().apply {
+            put("base_url", suwayomiBaseUrl)
+            put("auth_user", suwayomiUser)
+            put("auth_pass", suwayomiPass)
+            put("manga_name", mangaName)
+            put("manga_id", mangaId)
+            put("start_chapter", chapterIdx)
+            put("start_page", 0) // 从第0页开始预读
+            put("preload_count", 50) // 预读页数
+            put("min_chapters", 1)
+            put("max_chapters", 1)
+        }
+
+        val request = Request.Builder()
+            .url(preloadUrl)
+            .addHeader("X-API-Key", secretKey)
+            .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+
+        Log.d("MangaOcr", "Triggering Preload: $mangaId Ch:$chapterIdx on $suwayomiBaseUrl")
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("MangaOcr", "Preload trigger failed: ${e.message}")
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                // 预读请求只是触发信号，不需要处理返回内容，只要 200 OK 即可
+                Log.d("MangaOcr", "Preload trigger response: ${response.code}")
+                response.close()
+            }
+        })
+    }
+
+    // 辅助函数：从完整 URL 提取 http://host:port
+    private fun extractBaseUrl(fullUrl: String): String {
+        return try {
+            val uri = fullUrl.toUri()
+            "${uri.scheme}://${uri.authority}"
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
 
     // --- 1. 获取预读数据 (Fetch Data) ---
     fun fetchChapterData(mangaId: Int, chapterIdx: Int, pageIdx: Int) {
@@ -119,7 +188,7 @@ class MangaOcrManager(private val webView: WebView) {
         // 我们统一在 MainActivity 解析时处理好 "+1" 的逻辑，这里直接用
         val url = "$serverUrl/api/v1/get_chapter_data?manga_id=$mangaId&chapter_idx=$chapterIdx&page_idx=$pageIdx"
 
-        Log.d("MangaOcr", "Fetching data: $url")
+        // Log.d("MangaOcr", "Fetching data: $url") // 减少刷屏，只在出错或成功时打日志
 
         val request = Request.Builder()
             .url(url)
@@ -129,16 +198,25 @@ class MangaOcrManager(private val webView: WebView) {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e("MangaOcr", "Fetch data failed: ${e.message}")
+                Log.e("MangaOcr", "Fetch failed ($pageIdx): ${e.message}")
             }
 
             override fun onResponse(call: Call, response: Response) {
-                response.body?.string()?.let { json ->
-                    val data = ChapterDataParser.parse(json)
+                val bodyStr = response.body?.string()
+                if (bodyStr.isNullOrEmpty()) return
+
+                try {
+                    val data = ChapterDataParser.parse(bodyStr)
                     if (data != null && data.items.isNotEmpty()) {
                         val key = "${mangaId}_${chapterIdx}_${pageIdx}"
                         MangaDataManager.updateData(key, data)
+                         Log.d("MangaOcr", "Cached Page $pageIdx (${data.items.size} items)")
+                    } else {
+                        // 这是一个关键日志：如果数据为空，说明预读还没完成，或者数据库里没这页
+                         Log.d("MangaOcr", "Page $pageIdx empty/parsing failed")
                     }
+                } catch (e: Exception) {
+                    Log.e("MangaOcr", "Parse error: ${e.message}")
                 }
             }
         })
@@ -220,7 +298,13 @@ class MangaOcrManager(private val webView: WebView) {
 
         // 分支 A: 无本地数据 -> 截图
         if (data == null) {
-            Log.d("MangaOcr", "Cache Miss ($key), fallback to crop.")
+            Log.d("MangaOcr", "Cache Miss ($key), triggering lazy fetch & fallback.")
+
+            // 关键优化：虽然这次Miss了，但我们立即触发一次 Fetch，
+            // 这样下次点击（或者用户犹豫一下再点）时就有数据了。
+            fetchChapterData(mangaId, chapterIdx, pageIdx)
+
+            // 依然走截图兜底，保证本次体验
             processCrop(touchX.toInt(), touchY.toInt())
             return
         }
