@@ -49,9 +49,9 @@
 ### 🤖 第二阶段：激活 AI 翻译与 OCR 功能 (Level 2)
 
 1. **获取 API Key**：推荐前往 [DeepSeek 开放平台](https://platform.deepseek.com/) 获取高性价比的 API 令牌。
-2. **部署 OCR 后端**：
-    - 前往 [Manga-OCR-Server](https://github.com/lightningandme/Manga-OCR-Server) 下载**离线整合包**。
-    - 解压并双击 `Run_Server.bat` 启动。
+2. **部署 OCR 后端**（任选其一）：
+    - **方案 A · 开箱即用**：前往 [Manga-OCR-Server](https://github.com/lightningandme/Manga-OCR-Server) 下载**离线整合包**，解压并双击 `Run_Server.bat` 启动。
+    - **方案 B · 现代替代（推荐）**：使用 [SuwayomiOCR](https://github.com/Concyclics/SuwayomiOCR)。**HTTP 协议与本 App 完全兼容**（端口 `12233`、`X-API-Key` 鉴权、`/ocr` / `/get_translation` / `/health` 路由全部一致，**无需修改任何 App 设置**）。推荐组合 **DeepSeek-OCR-2 + DeepSeek-v4-flash**：OCR 走专为漫画训练的视觉模型（本地 vLLM 或 Novita AI 等托管平台），翻译走 DeepSeek 云端 API（约 ¥2.5 / 千页）。常驻 80 MB，支持 Docker 一行起服。质量对比详见 [BENCHMARKS](https://github.com/Concyclics/SuwayomiOCR/blob/main/docs/BENCHMARKS.zh.md)，部署步骤见 [DEPLOY → 推荐组合](https://github.com/Concyclics/SuwayomiOCR/blob/main/docs/DEPLOY.zh.md#推荐组合tldr)。
 3. **客户端联动**：在 SuwayomiGO 的“更多设置”中填入 OCR 服务器地址。
 4. **开启姿势**：在漫画阅读界面 **[大幅度下拉]** 或 **[长按音量+]** 即可进入 OCR 划词模式。
 
