@@ -201,13 +201,33 @@ class MainActivity : AppCompatActivity() {
 
         webView.webViewClient = object : WebViewClient() {
 
-            // 解决旧版内核不支持 Object.hasOwn 的问题
+            // 解决旧版内核不支持 Object.hasOwn 和 Array.findLast 的问题
             private fun injectFixes(view: WebView?) {
                 val js = """
                     (function() {
                         if (!Object.hasOwn) {
                             Object.hasOwn = function(object, property) {
                                 return Object.prototype.hasOwnProperty.call(object, property);
+                            };
+                        }
+                        if (!Array.prototype.findLast) {
+                            Array.prototype.findLast = function(callback, thisArg) {
+                                for (var i = this.length - 1; i >= 0; i--) {
+                                    if (callback.call(thisArg, this[i], i, this)) {
+                                        return this[i];
+                                    }
+                                }
+                                return undefined;
+                            };
+                        }
+                        if (!Array.prototype.findLastIndex) {
+                            Array.prototype.findLastIndex = function(callback, thisArg) {
+                                for (var i = this.length - 1; i >= 0; i--) {
+                                    if (callback.call(thisArg, this[i], i, this)) {
+                                        return i;
+                                    }
+                                }
+                                return -1;
                             };
                         }
                     })();
@@ -504,7 +524,7 @@ class MainActivity : AppCompatActivity() {
                 val currentUrl = webView.url
                 val rootSuffixes = listOf("library", "updates", "history", "sources", "extensions", "migrate", "more")
                 val isRootPage = rootSuffixes.any { suffix ->
-                    currentUrl?.endsWith(suffix) == true || currentUrl?.endsWith("$suffix/") == true
+                    currentUrl?.endsWith(suffix) == true || currentUrl?.endsWith("${suffix}/") == true
                 }
 
                 if (isRootPage) {
