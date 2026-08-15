@@ -90,7 +90,6 @@
 
 ---
 
-## Star History
 
 <a href="https://www.star-history.com/?type=date&legend=top-left&repos=lightningandme%2FSuwayomiGO">
  <picture>
