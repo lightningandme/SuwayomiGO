@@ -90,8 +90,15 @@
 
 ---
 
-## ⭐ Star History
-[![Star History Chart](https://api.star-history.com/svg?repos=lightningandme/SuwayomiGO&type=date&legend=top-left)](https://www.star-history.com/#lightningandme/SuwayomiGO&type=date&legend=top-left)
+## Star History
+
+<a href="https://www.star-history.com/?type=date&legend=top-left&repos=lightningandme%2FSuwayomiGO">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=lightningandme/SuwayomiGO&type=date&theme=dark&legend=top-left&sealed_token=pExzMJmzm65DCo92FzjUFngrOpHWvbeTJrlwZcZf-BC3fsSwknObP_LimI44F5zT_QNYMoPDBPRFvnwSe5h_i8IYsu4SA91WxI2rIT8-nW9K0CnlwCMgjg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=lightningandme/SuwayomiGO&type=date&legend=top-left&sealed_token=pExzMJmzm65DCo92FzjUFngrOpHWvbeTJrlwZcZf-BC3fsSwknObP_LimI44F5zT_QNYMoPDBPRFvnwSe5h_i8IYsu4SA91WxI2rIT8-nW9K0CnlwCMgjg" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=lightningandme/SuwayomiGO&type=date&legend=top-left&sealed_token=pExzMJmzm65DCo92FzjUFngrOpHWvbeTJrlwZcZf-BC3fsSwknObP_LimI44F5zT_QNYMoPDBPRFvnwSe5h_i8IYsu4SA91WxI2rIT8-nW9K0CnlwCMgjg" />
+ </picture>
+</a>
 
 ---
 
